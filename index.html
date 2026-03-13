@@ -237,8 +237,12 @@ tfoot td{padding:7px 12px;font-weight:700;}
         <label><input type="checkbox" id="chk-all" onchange="toggleAllCheck(this.checked)"/> 전체 선택</label>
         <span class="bulk-count" id="bulk-count">0개 선택</span>
         <button class="bulk-del-btn" id="bulk-del-btn" onclick="bulkDelete()" disabled>🗑 선택 삭제</button>
+        <button class="btn btn-sm" style="background:#2eaa60;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;" onclick="downloadProdExcel()">📥 선택 다운로드</button>
+        <button class="btn btn-sm" style="background:#4F8EF7;color:#fff;border:none;padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;" onclick="document.getElementById('prod-upload-input').click()">📤 일괄 수정 업로드</button>
+        <input type="file" id="prod-upload-input" accept=".xlsx,.xls" style="display:none;" onchange="uploadProdExcel(this)"/>
       </div>
       <div id="dup-warn-area"></div>
+      <div id="upload-error-area"></div>
       <div id="prod-list"></div>
     </div>
     <div class="modal-foot">
@@ -687,7 +691,9 @@ function renderProdModal(){
           onchange="toggleCheck(${pid},this.checked)"/>
         <input class="prod-name-input" value="${escH(p.name)}" placeholder="제품명"
           oninput="getProd(${pid}).name=this.value"/>
-        <span class="prod-supplier">${escH(p.supplier||'')}</span>
+        <input class="prod-name-input" value="${escH(p.supplier||'')}" placeholder="공급사"
+          style="max-width:120px;color:#888;font-size:12px;"
+          oninput="getProd(${pid}).supplier=this.value"/>
         <button class="btn btn-danger btn-sm" onclick="deleteProd(${pid})">🗑 삭제</button>
       </div>
       <div class="codes-area">
@@ -814,6 +820,125 @@ function saveProdModal(){
     saveToDB('sales',S.sales,()=>{showDashboard();render();toast('✅ 제품 저장 완료');});
   });
   document.getElementById('prod-modal').classList.remove('show');
+}
+
+// ── 제품 일괄 다운로드 ────────────────────────────────────────
+function downloadProdExcel(){
+  const targets = selectedProds.size > 0
+    ? editProds.filter(p => selectedProds.has(p._pid))
+    : editProds;
+  if(!targets.length){ toast('다운로드할 제품이 없습니다','err'); return; }
+
+  // 모든 alias 라벨 수집
+  const allLabels = [];
+  targets.forEach(p => (p.aliases||[]).forEach(a => {
+    if(a.label && !allLabels.includes(a.label)) allLabels.push(a.label);
+  }));
+
+  const header = ['코드1','제품명','공급사', ...allLabels];
+  const rows = targets.map(p => {
+    const row = [p.code1||'', p.name||'', p.supplier||''];
+    allLabels.forEach(lbl => {
+      const found = (p.aliases||[]).find(a => a.label === lbl);
+      row.push(found ? found.code||'' : '');
+    });
+    return row;
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  ws['!cols'] = header.map((h,i) => ({ wch: i===1 ? 40 : i===2 ? 18 : 20 }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '제품목록');
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  XLSX.writeFile(wb, `제품목록_${ts}.xlsx`);
+  toast(`📥 ${targets.length}개 제품 다운로드`);
+}
+
+// ── 제품 일괄 수정 업로드 ─────────────────────────────────────
+function uploadProdExcel(input){
+  const file = input.files[0];
+  if(!file) return;
+  input.value = '';
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const wb = XLSX.read(ev.target.result, {type:'array'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(rows.length < 2){ toast('데이터가 없습니다','err'); return; }
+
+      const hdr = rows[0].map(h => String(h||'').trim());
+      const c1Idx = hdr.findIndex(h => h==='코드1');
+      const nameIdx = hdr.findIndex(h => h==='제품명');
+      const supplierIdx = hdr.findIndex(h => h==='공급사');
+
+      if(c1Idx < 0 || nameIdx < 0){
+        showUploadError(['❌ 헤더에 "코드1", "제품명" 컬럼이 필요합니다.']);
+        return;
+      }
+
+      const aliasLabels = hdr.filter((h,i) =>
+        i!==c1Idx && i!==nameIdx && (supplierIdx<0||i!==supplierIdx) && h
+      );
+
+      const errors = [];
+      const incomingC1s = [];
+
+      rows.slice(1).forEach((row, ri) => {
+        const code1 = String(row[c1Idx]||'').trim();
+        if(!code1) return;
+        if(!editProds.find(p => p.code1 === code1)){
+          errors.push(`행 ${ri+2}: 코드1 "${code1}" 은 등록되지 않은 제품입니다 (코드1 추가·변경 불가)`);
+          return;
+        }
+        if(incomingC1s.includes(code1)){
+          errors.push(`행 ${ri+2}: 코드1 "${code1}" 이 파일 내에서 중복됩니다`);
+        } else {
+          incomingC1s.push(code1);
+        }
+      });
+
+      if(errors.length){ showUploadError(errors); return; }
+
+      let updatedCount = 0;
+      rows.slice(1).forEach(row => {
+        const code1 = String(row[c1Idx]||'').trim();
+        if(!code1) return;
+        const prod = editProds.find(p => p.code1 === code1);
+        if(!prod) return;
+
+        prod.name = String(row[nameIdx]||'').trim() || prod.name;
+        if(supplierIdx >= 0) prod.supplier = String(row[supplierIdx]||'').trim();
+
+        aliasLabels.forEach(lbl => {
+          const lIdx = hdr.indexOf(lbl);
+          const val = String(row[lIdx]||'').trim();
+          if(!prod.aliases) prod.aliases = [];
+          const ex = prod.aliases.find(a => a.label === lbl);
+          if(ex){ ex.code = val; }
+          else if(val){ prod.aliases.push({label:lbl, code:val}); }
+        });
+        updatedCount++;
+      });
+
+      document.getElementById('upload-error-area').innerHTML = '';
+      renderProdModal();
+      toast(`✅ ${updatedCount}개 제품 일괄 수정됨 — 💾 저장 버튼을 눌러야 반영됩니다`);
+    } catch(e){
+      showUploadError([`파일 읽기 오류: ${e.message}`]);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showUploadError(msgs){
+  document.getElementById('upload-error-area').innerHTML =
+    `<div style="background:#fff5f5;border:1px solid #ffcccc;border-radius:8px;padding:10px 14px;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;color:#cc0000;margin-bottom:6px;">⚠️ 업로드 오류 (${msgs.length}건)</div>
+      ${msgs.slice(0,10).map(m=>`<div style="font-size:11px;color:#c00;margin:2px 0;">• ${escH(m)}</div>`).join('')}
+      ${msgs.length>10?`<div style="font-size:11px;color:#aaa;margin-top:4px;">... 외 ${msgs.length-10}건</div>`:''}
+    </div>`;
 }
 
 // ═══════════════════════════════════════════════════════════
