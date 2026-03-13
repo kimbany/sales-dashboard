@@ -84,12 +84,13 @@ input{font-family:inherit;}
 .sc-sub{font-size:9px;color:#ccc;margin-top:3px;}
 
 #stats-panel{background:#fff;border:1px solid #e4e7f0;border-radius:13px;padding:16px 20px;box-shadow:0 2px 10px #0000000a;}
-#ctrl-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
+#ctrl-bar{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
+.ctrl-row1{display:flex;align-items:center;}
+.ctrl-row2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .store-filters{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
 .filter-lbl{font-size:10px;color:#aaa;margin-right:2px;white-space:nowrap;}
 .fbtn{padding:4px 11px;border-radius:20px;font-size:11px;border:1px solid #e0e3ef;color:#aaa;background:transparent;transition:all .14s;white-space:nowrap;}
 .fbtn.on{border-color:currentColor;}
-#tab-date-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .tab-grp{display:flex;background:#F5F6FA;border-radius:7px;padding:3px;gap:2px;}
 .tbtn{padding:5px 13px;border-radius:5px;font-size:12px;color:#aaa;transition:all .18s;}
 .tbtn.on{background:#4F8EF7;color:#fff;}
@@ -328,8 +329,10 @@ tfoot td{padding:7px 12px;font-weight:700;}
     <div id="store-cards"></div>
     <div id="stats-panel">
       <div id="ctrl-bar">
-        <div class="store-filters" id="store-filter-btns"><span class="filter-lbl">거래처</span></div>
-        <div id="tab-date-row">
+        <div class="ctrl-row1">
+          <div class="store-filters" id="store-filter-btns"><span class="filter-lbl">거래처</span></div>
+        </div>
+        <div class="ctrl-row2">
           <div class="quick-btns" id="quick-btns">
             <button class="qbtn" onclick="setQuick('today')">오늘</button>
             <button class="qbtn" onclick="setQuick('week')">최근 일주일</button>
