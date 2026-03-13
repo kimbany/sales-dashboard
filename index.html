@@ -382,7 +382,16 @@ function ref(p){return db.ref(`users/${S.uid}/${p}`);}
 function loadFromDB(){
   ref('products').once('value').then(snap=>{
     const v=snap.val();
-    if(v){S.products=Object.values(v);enableSalesUpload();}
+    if(v){
+      // Firebase는 배열을 객체로 저장 → aliases 복원
+      S.products=Object.values(v).map(p=>({
+        ...p,
+        aliases: p.aliases
+          ? Object.values(p.aliases).filter(a=>a&&a.code)
+          : []
+      }));
+      enableSalesUpload();
+    }
     return ref('sales').once('value');
   }).then(snap=>{
     const v=snap.val();if(v)S.sales=Object.values(v);
@@ -391,7 +400,11 @@ function loadFromDB(){
 }
 function saveToDB(key,arr,cb){
   syncBadge('syncing');
-  const obj={};arr.forEach((x,i)=>obj[i]=x);
+  // products 저장 시 aliases를 순수 배열로 정리
+  const cleaned = key==='products'
+    ? arr.map(p=>({...p, aliases:(p.aliases||[]).filter(a=>a&&String(a.code||'').trim())}))
+    : arr;
+  const obj={};cleaned.forEach((x,i)=>obj[i]=x);
   ref(key).set(obj).then(()=>{syncBadge('saved');if(cb)cb();}).catch(e=>{syncBadge('');toast('저장 오류: '+e.message,'err');});
 }
 function enableSalesUpload(){
