@@ -383,13 +383,17 @@ function loadFromDB(){
   ref('products').once('value').then(snap=>{
     const v=snap.val();
     if(v){
-      // Firebase는 배열을 객체로 저장 → aliases 복원
-      S.products=Object.values(v).map(p=>({
-        ...p,
-        aliases: p.aliases
-          ? Object.values(p.aliases).filter(a=>a&&a.code)
-          : []
-      }));
+      S.products=Object.values(v).map(p=>{
+        // Firebase는 배열을 {0:..., 1:...} 객체로 저장 → 배열로 복원
+        let aliases=[];
+        if(p.aliases){
+          aliases=Array.isArray(p.aliases)
+            ? p.aliases
+            : Object.values(p.aliases);
+          aliases=aliases.filter(a=>a&&a.label); // null 제거
+        }
+        return {...p, aliases};
+      });
       enableSalesUpload();
     }
     return ref('sales').once('value');
@@ -400,9 +404,9 @@ function loadFromDB(){
 }
 function saveToDB(key,arr,cb){
   syncBadge('syncing');
-  // products 저장 시 aliases를 순수 배열로 정리
+  // products 저장 시 aliases를 순수 배열로 정리 (빈코드 포함 저장 - 편집 중 유지 위해)
   const cleaned = key==='products'
-    ? arr.map(p=>({...p, aliases:(p.aliases||[]).filter(a=>a&&String(a.code||'').trim())}))
+    ? arr.map(p=>({...p, aliases:Array.isArray(p.aliases)?p.aliases:Object.values(p.aliases||{})}))
     : arr;
   const obj={};cleaned.forEach((x,i)=>obj[i]=x);
   ref(key).set(obj).then(()=>{syncBadge('saved');if(cb)cb();}).catch(e=>{syncBadge('');toast('저장 오류: '+e.message,'err');});
@@ -616,25 +620,31 @@ document.getElementById('sales-file').addEventListener('change',function(e){
 // ═══════════════════════════════════════════════════════════
 // ── 제품 관리 모달 ──────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════
+// 인덱스 대신 pid(고유ID) 기반으로 항상 정확하게 참조
+let _pid=0;
+function mkpid(){ return ++_pid; }
+function getProd(pid){ return editProds.find(p=>p._pid===pid); }
+
 function openProdModal(){
   if(!S.products.length){toast('제품 리스트가 없습니다','err');return;}
-  editProds=JSON.parse(JSON.stringify(S.products));
+  editProds=JSON.parse(JSON.stringify(S.products)).map(p=>({...p, _pid:mkpid()}));
   selectedProds=new Set();
   document.getElementById('prod-search').value='';
   renderProdModal();
   document.getElementById('prod-modal').classList.add('show');
 }
 
-function renderProdModal(){
+function getFilteredProds(){
   const q=document.getElementById('prod-search').value.trim().toLowerCase();
-  const list=q
-    ? editProds.filter(p=>
-        p.name.toLowerCase().includes(q)||
-        String(p.code1||'').toLowerCase().includes(q)||
-        (p.aliases||[]).some(a=>String(a.code||'').toLowerCase().includes(q))
-      )
-    : editProds;
+  return q ? editProds.filter(p=>
+    p.name.toLowerCase().includes(q)||
+    String(p.code1||'').toLowerCase().includes(q)||
+    (p.aliases||[]).some(a=>String(a.code||'').toLowerCase().includes(q))
+  ) : editProds;
+}
 
+function renderProdModal(){
+  const list=getFilteredProds();
   document.getElementById('prod-count').textContent=`${editProds.length}개 제품`;
   updateBulkBar();
 
@@ -642,36 +652,38 @@ function renderProdModal(){
   const c1Map={};
   editProds.forEach(p=>{if(p.code1){if(!c1Map[p.code1])c1Map[p.code1]=0;c1Map[p.code1]++;}});
   const dupC1=Object.entries(c1Map).filter(([,n])=>n>1).map(([c])=>c);
-  const warnEl=document.getElementById('dup-warn-area');
-  warnEl.innerHTML=dupC1.length
-    ? `<div class="dup-warn">⚠️ 코드1 중복 ${dupC1.length}건: ${dupC1.join(', ')}</div>`
-    : '';
+  document.getElementById('dup-warn-area').innerHTML=dupC1.length
+    ? `<div class="dup-warn">⚠️ 코드1 중복 ${dupC1.length}건: ${dupC1.join(', ')}</div>` : '';
 
-  document.getElementById('prod-list').innerHTML=list.map((p)=>{
-    const gi=editProds.indexOf(p);
+  document.getElementById('prod-list').innerHTML=list.map(p=>{
+    const pid=p._pid;
     const aliases=p.aliases||[];
-    const isChecked=selectedProds.has(gi);
+    const isChecked=selectedProds.has(pid);
     const aliasHtml=aliases.map((a,ai)=>`
-      <div class="code-chip">
+      <div class="code-chip" data-ai="${ai}">
         <span class="code-label">${escH(a.label)}</span>
-        <input value="${escH(a.code)}" placeholder="코드" oninput="editProds[${gi}].aliases[${ai}].code=this.value"/>
-        <span class="chip-del" onclick="removeAlias(${gi},${ai})">✕</span>
+        <input value="${escH(a.code)}" placeholder="코드"
+          oninput="getProd(${pid}).aliases[${ai}].code=this.value"/>
+        <span class="chip-del" onclick="removeAlias(${pid},${ai})">✕</span>
       </div>`).join('');
 
-    return `<div class="prod-row${isChecked?' selected':''}" id="prod-row-${gi}">
+    return `<div class="prod-row${isChecked?' selected':''}" id="prow-${pid}" data-pid="${pid}">
       <div class="prod-row-top">
-        <input type="checkbox" class="prod-row-check" ${isChecked?'checked':''} onchange="toggleCheck(${gi},this.checked)"/>
-        <input class="prod-name-input" value="${escH(p.name)}" placeholder="제품명" oninput="editProds[${gi}].name=this.value"/>
+        <input type="checkbox" class="prod-row-check" ${isChecked?'checked':''}
+          onchange="toggleCheck(${pid},this.checked)"/>
+        <input class="prod-name-input" value="${escH(p.name)}" placeholder="제품명"
+          oninput="getProd(${pid}).name=this.value"/>
         <span class="prod-supplier">${escH(p.supplier||'')}</span>
-        <button class="btn btn-danger btn-sm" onclick="deleteProd(${gi})">🗑 삭제</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProd(${pid})">🗑 삭제</button>
       </div>
       <div class="codes-area">
         <div class="code-chip" style="background:#EEF4FF;border-color:#4F8EF740;">
           <span class="code-label" style="color:#4F8EF7;">코드1</span>
-          <input class="code1" value="${escH(p.code1||'')}" placeholder="코드1(기본키)" oninput="editProds[${gi}].code1=this.value"/>
+          <input class="code1" value="${escH(p.code1||'')}" placeholder="코드1(기본키)"
+            oninput="getProd(${pid}).code1=this.value"/>
         </div>
         ${aliasHtml}
-        <button class="add-code-btn" onclick="addAlias(${gi})">＋ 코드 추가</button>
+        <button class="add-code-btn" onclick="addAlias(${pid})">＋ 코드 추가</button>
       </div>
     </div>`;
   }).join('');
@@ -681,31 +693,21 @@ function updateBulkBar(){
   const cnt=selectedProds.size;
   document.getElementById('bulk-count').textContent=`${cnt}개 선택`;
   document.getElementById('bulk-del-btn').disabled=cnt===0;
-  const allVis=document.querySelectorAll('.prod-row-check');
+  const list=getFilteredProds();
   const chkAll=document.getElementById('chk-all');
-  if(chkAll) chkAll.checked=allVis.length>0&&[...allVis].every(c=>c.checked);
+  if(chkAll) chkAll.checked=list.length>0&&list.every(p=>selectedProds.has(p._pid));
 }
 
-function toggleCheck(gi, checked){
-  if(checked) selectedProds.add(gi); else selectedProds.delete(gi);
-  const row=document.getElementById(`prod-row-${gi}`);
+function toggleCheck(pid, checked){
+  if(checked) selectedProds.add(pid); else selectedProds.delete(pid);
+  const row=document.getElementById(`prow-${pid}`);
   if(row) row.classList.toggle('selected', checked);
   updateBulkBar();
 }
 
 function toggleAllCheck(checked){
-  // 현재 검색 결과 기준으로 전체 선택/해제
-  const q=document.getElementById('prod-search').value.trim().toLowerCase();
-  const list=q
-    ? editProds.filter(p=>
-        p.name.toLowerCase().includes(q)||
-        String(p.code1||'').toLowerCase().includes(q)||
-        (p.aliases||[]).some(a=>String(a.code||'').toLowerCase().includes(q))
-      )
-    : editProds;
-  list.forEach(p=>{
-    const gi=editProds.indexOf(p);
-    if(checked) selectedProds.add(gi); else selectedProds.delete(gi);
+  getFilteredProds().forEach(p=>{
+    if(checked) selectedProds.add(p._pid); else selectedProds.delete(p._pid);
   });
   renderProdModal();
 }
@@ -714,9 +716,7 @@ function bulkDelete(){
   const cnt=selectedProds.size;
   if(!cnt) return;
   if(!confirm(`선택한 제품 ${cnt}개를 삭제하시겠습니까?`)) return;
-  // 인덱스 내림차순으로 삭제 (앞에서 지우면 인덱스 틀어짐)
-  const idxs=[...selectedProds].sort((a,b)=>b-a);
-  idxs.forEach(i=>editProds.splice(i,1));
+  editProds=editProds.filter(p=>!selectedProds.has(p._pid));
   selectedProds=new Set();
   renderProdModal();
   toast(`🗑 ${cnt}개 삭제됨 (저장 전)`,'warn');
@@ -724,40 +724,73 @@ function bulkDelete(){
 
 function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
-function addAlias(gi){
-  if(!editProds[gi].aliases) editProds[gi].aliases=[];
-  // 자동 라벨 제안: 기존 라벨 기반으로 다음 번호
-  const existing=editProds[gi].aliases.map(a=>a.label);
+function addAlias(pid){
+  const p=getProd(pid);
+  if(!p) return;
+  if(!p.aliases) p.aliases=[];
+  const existingLabels=p.aliases.map(a=>a.label);
   const defaults=['코드2','쿠팡코드','이마트코드','메가마트코드','코드3','코드4','코드5'];
-  const label=defaults.find(d=>!existing.includes(d))||`코드${existing.length+2}`;
-  editProds[gi].aliases.push({label, code:''});
-  renderProdModal();
-  // 포커스를 새로 추가된 input으로
-  setTimeout(()=>{
-    const row=document.getElementById(`prod-row-${gi}`);
-    if(row){const inputs=row.querySelectorAll('.code-chip input');if(inputs.length)inputs[inputs.length-1].focus();}
-  },50);
+  const label=defaults.find(d=>!existingLabels.includes(d))||`코드${existingLabels.length+2}`;
+  const ai=p.aliases.length;
+  p.aliases.push({label, code:''});
+
+  // 해당 제품 row에만 칩 직접 삽입 (전체 재렌더 없이)
+  const row=document.getElementById(`prow-${pid}`);
+  if(row){
+    const addBtn=row.querySelector('.add-code-btn');
+    const chip=document.createElement('div');
+    chip.className='code-chip';
+    chip.dataset.ai=ai;
+    chip.innerHTML=`
+      <span class="code-label">${escH(label)}</span>
+      <input value="" placeholder="코드"
+        oninput="getProd(${pid}).aliases[${ai}].code=this.value"/>
+      <span class="chip-del" onclick="removeAlias(${pid},${ai})">✕</span>`;
+    addBtn.parentNode.insertBefore(chip, addBtn);
+    chip.querySelector('input').focus();
+  }
 }
 
-function removeAlias(gi,ai){
-  editProds[gi].aliases.splice(ai,1);
-  renderProdModal();
+function removeAlias(pid,ai){
+  const p=getProd(pid);
+  if(!p) return;
+  p.aliases.splice(ai,1);
+  // 해당 제품 row만 다시 그리기
+  const row=document.getElementById(`prow-${pid}`);
+  if(row){
+    const aliases=p.aliases||[];
+    const isChecked=selectedProds.has(pid);
+    const aliasHtml=aliases.map((a,i)=>`
+      <div class="code-chip" data-ai="${i}">
+        <span class="code-label">${escH(a.label)}</span>
+        <input value="${escH(a.code)}" placeholder="코드"
+          oninput="getProd(${pid}).aliases[${i}].code=this.value"/>
+        <span class="chip-del" onclick="removeAlias(${pid},${i})">✕</span>
+      </div>`).join('');
+    row.querySelector('.codes-area').innerHTML=`
+      <div class="code-chip" style="background:#EEF4FF;border-color:#4F8EF740;">
+        <span class="code-label" style="color:#4F8EF7;">코드1</span>
+        <input class="code1" value="${escH(p.code1||'')}" placeholder="코드1(기본키)"
+          oninput="getProd(${pid}).code1=this.value"/>
+      </div>
+      ${aliasHtml}
+      <button class="add-code-btn" onclick="addAlias(${pid})">＋ 코드 추가</button>`;
+  }
 }
 
-function deleteProd(gi){
-  if(!confirm(`"${editProds[gi].name}" 제품을 삭제하시겠습니까?`)) return;
-  editProds.splice(gi,1);
+function deleteProd(pid){
+  const p=getProd(pid);
+  if(!confirm(`"${p?p.name:'이 제품'}"을 삭제하시겠습니까?`)) return;
+  editProds=editProds.filter(p=>p._pid!==pid);
+  selectedProds.delete(pid);
   renderProdModal();
 }
 
 function saveProdModal(){
-  // 빈 코드1 경고
   const empty=editProds.filter(p=>!String(p.code1||'').trim());
-  if(empty.length){
-    toast(`⚠️ 코드1이 비어있는 제품 ${empty.length}개가 있습니다`,'warn');return;
-  }
-  S.products=editProds;
-  // 판매 데이터의 productName 재매핑
+  if(empty.length){toast(`⚠️ 코드1이 비어있는 제품 ${empty.length}개가 있습니다`,'warn');return;}
+  // _pid 제거 후 저장
+  S.products=editProds.map(({_pid,...rest})=>rest);
   const codeMap=buildCodeMap();
   S.sales=S.sales.map(s=>{
     const mapped=codeMap.get(s.code)||codeMap.get(s.productName)||s.productName;
@@ -765,10 +798,7 @@ function saveProdModal(){
     return {...s, productName:mapped, supplier:prod?prod.supplier:s.supplier};
   });
   saveToDB('products',S.products,()=>{
-    saveToDB('sales',S.sales,()=>{
-      showDashboard(); render();
-      toast('✅ 제품 저장 완료. 판매 데이터 코드 재매핑 완료.');
-    });
+    saveToDB('sales',S.sales,()=>{showDashboard();render();toast('✅ 제품 저장 완료');});
   });
   document.getElementById('prod-modal').classList.remove('show');
 }
