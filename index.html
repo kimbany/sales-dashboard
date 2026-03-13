@@ -184,6 +184,8 @@ tfoot td{padding:7px 12px;font-weight:700;}
 .sales-edit-table input{border:1px solid #e4e7f0;border-radius:5px;padding:4px 7px;font-size:12px;color:#333;outline:none;}
 .sales-edit-table input:focus{border-color:#4F8EF7;}
 .sales-edit-table tr.sf-checked{background:#F5F8FF;}
+.sales-edit-table tr.sf-unmatched td:first-child{border-left:3px solid #F75454;}
+.sales-edit-table tr.sf-unmatched{background:#fff8f8;}
 
 /* 판매 편집 필터 바 */
 #sales-filter-bar{padding:12px 18px;border-bottom:1px solid #e4e7f0;display:flex;flex-direction:column;gap:10px;background:#fafbfd;flex-shrink:0;}
@@ -201,16 +203,6 @@ tfoot td{padding:7px 12px;font-weight:700;}
 
 <div id="loading"><div class="spinner"></div><div style="font-size:12px;color:#888;">연결 중...</div></div>
 
-<div id="login-screen">
-  <div class="login-card">
-    <div class="login-logo">📊</div>
-    <h1>매출 대시보드</h1>
-    <p>Google 계정으로 로그인하여 시작하세요</p>
-    <button class="google-btn" onclick="googleLogin()">
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/>Google로 로그인
-    </button>
-  </div>
-</div>
 
 <div id="header">
   <div id="logo">
@@ -224,10 +216,6 @@ tfoot td{padding:7px 12px;font-weight:700;}
     <label class="upload-btn green off" id="sales-lbl">📂 판매 업로드<input type="file" id="sales-file" accept=".xlsx,.xls,.csv" disabled/></label>
     <button class="hdr-btn" onclick="openProdModal()">⚙️ 제품 관리</button>
     <button class="hdr-btn" onclick="openSalesModal()">✏️ 판매 편집</button>
-    <div id="user-info">
-      <img id="user-photo"/><span id="user-name"></span>
-      <button class="logout-btn" onclick="logout()">로그아웃</button>
-    </div>
   </div>
 </div>
 
@@ -359,9 +347,9 @@ const db=firebase.database();
 // sales: [{ date, store, code, productName, supplier, qty, supply, vat, total }, ...]
 
 const S={products:[],sales:[],tab:'일별',selStore:'전체',dateFrom:'',dateTo:'',expanded:null,page:1,PG:20,uid:null};
-let editProds=[]; // 제품 모달 편집용 deep copy
-let editSales=[]; // 판매 모달 편집용 deep copy
-let selectedProds=new Set(); // 일괄 선택된 인덱스
+let editProds=[];
+let editSales=[];
+let selectedProds=new Set();
 
 const PAL=['#4F8EF7','#54D07A','#F7A54F','#F75496','#A054F7','#54C8F7','#F7D454','#F75454','#54F7C8','#C854F7'];
 const fmt=n=>(n!=null&&!isNaN(n)&&n!=='')?Number(n).toLocaleString():'-';
@@ -392,47 +380,30 @@ function syncBadge(s){
   else el.style.display='none';
 }
 
-// ── 인증 ─────────────────────────────────────────────────────
-function googleLogin(){auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>toast('로그인 실패: '+e.message,'err'));}
-function logout(){auth.signOut();}
+// ── DB: shared/ 경로 (로그인 불필요, 누구나 읽기/쓰기) ──────
+function ref(p){return db.ref(p);}
 
-auth.onAuthStateChanged(user=>{
+window.addEventListener('load',()=>{
   document.getElementById('loading').style.display='none';
-  if(user){
-    S.uid=user.uid;
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('header').style.display='flex';
-    document.getElementById('content').style.display='block';
-    document.getElementById('user-name').textContent=user.displayName||user.email;
-    const ph=document.getElementById('user-photo');
-    if(user.photoURL){ph.src=user.photoURL;ph.style.display='block';}
-    loadFromDB();
-  } else {
-    S.uid=null;S.products=[];S.sales=[];
-    document.getElementById('login-screen').style.display='flex';
-    document.getElementById('header').style.display='none';
-    document.getElementById('content').style.display='none';
-  }
+  document.getElementById('header').style.display='flex';
+  document.getElementById('content').style.display='block';
+  loadFromDB();
 });
 
-// ── DB ───────────────────────────────────────────────────────
-function ref(p){return db.ref(`users/${S.uid}/${p}`);}
 function loadFromDB(){
   ref('products').once('value').then(snap=>{
     const v=snap.val();
     if(v){
       S.products=Object.values(v).map(p=>{
-        // aliasMap({label:code}) → aliases 배열로 복원
         let aliases=[];
-        if(p.aliasMap && typeof p.aliasMap==='object'){
-          aliases=Object.entries(p.aliasMap).map(([label,code])=>({label, code:code||''}));
+        if(p.aliasMap&&typeof p.aliasMap==='object'){
+          aliases=Object.entries(p.aliasMap).map(([label,code])=>({label,code:code||''}));
         } else if(p.aliases){
-          // 구버전 호환
           aliases=Array.isArray(p.aliases)?p.aliases:Object.values(p.aliases);
           aliases=aliases.filter(a=>a&&a.label).map(a=>({label:a.label,code:a.code||''}));
         }
         const {aliasMap,...rest}=p;
-        return {...rest, aliases};
+        return {...rest,aliases};
       });
       enableSalesUpload();
     }
@@ -946,13 +917,21 @@ function sfBulkDelete(){
 function renderSalesModal(){
   const visible=sfGetFiltered();
   document.getElementById('sales-count').textContent=`전체 ${editSales.length}행`;
-  document.getElementById('sf-result-count').textContent=`표시 ${visible.length}행`;
+
+  // 미매칭 카운트 (제품 리스트에 없는 productName)
+  const prodNames=new Set(S.products.map(p=>p.name));
+  const unmatchedCnt=visible.filter(r=>r.productName&&!prodNames.has(r.productName)).length;
+  document.getElementById('sf-result-count').textContent=
+    `표시 ${visible.length}행`+(unmatchedCnt?` · ⚠️ 미매칭 ${unmatchedCnt}행`:'');
   sfUpdateBulkBar();
 
   if(!visible.length){
     document.getElementById('sales-modal-body').innerHTML=`<div class="no-data" style="padding:40px 0;">조건에 맞는 데이터가 없습니다</div>`;
     return;
   }
+
+  // 제품명 목록 (드롭다운용)
+  const prodOpts=S.products.map(p=>`<option value="${escH(p.name)}">${escH(p.name)}</option>`).join('');
 
   document.getElementById('sales-modal-body').innerHTML=`
     <table class="sales-edit-table">
@@ -968,13 +947,26 @@ function renderSalesModal(){
       <tbody>${visible.map(r=>{
         const gi=editSales.indexOf(r);
         const chk=SF.checked.has(r._eid);
-        return `<tr data-eid="${r._eid}" class="${chk?'sf-checked':''}">
+        const isUnmatched=r.productName&&!prodNames.has(r.productName);
+        // 미매칭: 드롭다운 선택 + 빨간 배경
+        const prodCell=isUnmatched
+          ? `<td style="min-width:180px;">
+               <select onchange="sfRemapProduct(${r._eid},this.value)"
+                 style="width:100%;border:1px solid #F75454;border-radius:5px;padding:4px 6px;font-size:11px;color:#e03030;background:#fff8f8;outline:none;">
+                 <option value="${escH(r.productName)}" selected>⚠️ ${escH(r.productName)}</option>
+                 <option disabled>── 제품 선택 ──</option>
+                 ${prodOpts}
+               </select>
+             </td>`
+          : `<td style="font-size:11px;color:#555;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+               title="${escH(r.productName||'')}">${escH(r.productName||'')}</td>`;
+
+        return `<tr data-eid="${r._eid}" class="${chk?'sf-checked':''}${isUnmatched?' sf-unmatched':''}">
           <td><input type="checkbox" style="width:14px;height:14px;accent-color:#4F8EF7;"
             ${chk?'checked':''} onchange="sfToggleRow(${r._eid},this.checked)"/></td>
           <td><input type="date" value="${r.date}" onchange="editSales[${gi}].date=this.value" style="width:128px;"/></td>
           <td><input value="${escH(r.store||'')}" onchange="editSales[${gi}].store=this.value" style="width:75px;"/></td>
-          <td style="font-size:11px;color:#555;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-            title="${escH(r.productName||'')}">${escH(r.productName||'')}</td>
+          ${prodCell}
           <td><input type="number" value="${r.qty}" onchange="editSales[${gi}].qty=Number(this.value)" style="width:65px;text-align:right;"/></td>
           <td><input type="number" value="${r.supply}" onchange="editSales[${gi}].supply=Number(this.value)" style="width:88px;text-align:right;"/></td>
           <td><input type="number" value="${r.total}" onchange="editSales[${gi}].total=Number(this.value)" style="width:88px;text-align:right;"/></td>
@@ -983,6 +975,15 @@ function renderSalesModal(){
       }).join('')}
       </tbody>
     </table>`;
+}
+
+function sfRemapProduct(eid, newName){
+  const r=editSales.find(r=>r._eid===eid);
+  if(!r) return;
+  r.productName=newName;
+  const prod=S.products.find(p=>p.name===newName);
+  if(prod) r.supplier=prod.supplier;
+  renderSalesModal();
 }
 
 function sfDeleteRow(eid){
