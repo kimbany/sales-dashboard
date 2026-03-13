@@ -998,8 +998,8 @@ const SF={dateFrom:'', dateTo:'', store:'전체', checked:new Set()};
 function openSalesModal(){
   if(!S.sales.length){toast('판매 데이터가 없습니다','err');return;}
   editSales=JSON.parse(JSON.stringify(S.sales)).sort((a,b)=>b.date.localeCompare(a.date)||a.store.localeCompare(b.store));
-  editSales.forEach((r,i)=>r._eid=i+1); // 고유 ID 부여
-  // 날짜 범위 초기값: 전체
+  editSales.forEach((r,i)=>r._eid=i+1);
+  // 초기값: 필터 없음 (데이터 바로 안 보임)
   SF.dateFrom=''; SF.dateTo=''; SF.store='전체'; SF.checked=new Set();
   const dates=editSales.map(r=>r.date).sort();
   if(dates.length){
@@ -1089,10 +1089,29 @@ function sfBulkDelete(){
 }
 
 function renderSalesModal(){
+  const hasFilter = SF.dateFrom || SF.dateTo || SF.store !== '전체';
+
+  // 필터 없으면 안내 화면
+  if(!hasFilter){
+    document.getElementById('sales-count').textContent=`전체 ${editSales.length}행`;
+    document.getElementById('sf-result-count').textContent='';
+    sfUpdateBulkBar();
+    document.getElementById('sales-modal-body').innerHTML=`
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:#aaa;">
+        <div style="font-size:36px;">🔍</div>
+        <div style="font-size:14px;font-weight:600;color:#555;">날짜 또는 거래처를 먼저 선택해주세요</div>
+        <div style="font-size:12px;color:#aaa;text-align:center;line-height:1.8;">
+          전체 데이터가 <b style="color:#4F8EF7;">${editSales.length.toLocaleString()}행</b>으로 많아<br>
+          필터를 걸어야 빠르게 불러올 수 있어요
+        </div>
+      </div>`;
+    return;
+  }
+
   const visible=sfGetFiltered();
   document.getElementById('sales-count').textContent=`전체 ${editSales.length}행`;
 
-  // 미매칭 카운트 (제품 리스트에 없는 productName)
+  // 미매칭 카운트
   const prodNames=new Set(S.products.map(p=>p.name));
   const unmatchedCnt=visible.filter(r=>r.productName&&!prodNames.has(r.productName)).length;
   document.getElementById('sf-result-count').textContent=
