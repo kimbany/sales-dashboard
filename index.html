@@ -4,15 +4,10 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>매출 대시보드</title>
-
-<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
-<!-- SheetJS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
 <script>
 const FIREBASE_CONFIG = {
   apiKey:            "AIzaSyBXqMGlCZanp7_EYCPdOodweWwHBQlsoPE",
@@ -24,85 +19,76 @@ const FIREBASE_CONFIG = {
   appId:             "1:1094159344938:web:bcd2e7dc6f415138692a53"
 };
 </script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
 body{background:#F5F6FA;color:#1a1d2e;font-family:'Noto Sans KR',sans-serif;min-height:100vh;font-size:13px;}
 button{font-family:inherit;cursor:pointer;border:none;background:none;}
 button:focus{outline:none;}
-input[type=date]{font-family:inherit;}
+input{font-family:inherit;}
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:#F5F6FA;}
 ::-webkit-scrollbar-thumb{background:#dde0ec;border-radius:3px;}
 
-/* 로딩 */
-#loading{position:fixed;inset:0;background:#F5F6FA;display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:14px;}
+#loading{position:fixed;inset:0;background:#F5F6FA;display:flex;align-items:center;justify-content:center;z-index:9999;flex-direction:column;gap:14px;}
 .spinner{width:36px;height:36px;border:3px solid #e0e3ef;border-top-color:#4F8EF7;border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* 로그인 화면 */
-#login-screen{display:none;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#F5F6FA;}
+#login-screen{display:none;flex-direction:column;align-items:center;justify-content:center;height:100vh;}
 .login-card{background:#fff;border:1px solid #e4e7f0;border-radius:16px;padding:52px 60px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:18px;box-shadow:0 4px 24px #0000000a;}
 .login-logo{width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,#4F8EF7,#A054F7);display:flex;align-items:center;justify-content:center;font-size:28px;}
-.login-card h1{font-size:20px;font-weight:700;color:#1a1d2e;}
+.login-card h1{font-size:20px;font-weight:700;}
 .login-card p{font-size:12px;color:#888;}
-.google-btn{display:flex;align-items:center;gap:10px;padding:12px 28px;border-radius:10px;background:#fff;color:#222;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;margin-top:4px;border:1px solid #e0e3ef;box-shadow:0 2px 8px #0000000a;}
+.google-btn{display:flex;align-items:center;gap:10px;padding:12px 28px;border-radius:10px;background:#fff;color:#222;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;border:1px solid #e0e3ef;box-shadow:0 2px 8px #0000000a;}
 .google-btn:hover{box-shadow:0 4px 16px #0000001a;}
 .google-btn img{width:18px;height:18px;}
 
-/* 헤더 */
 #header{background:#fff;border-bottom:1px solid #e4e7f0;padding:0 24px;display:none;align-items:center;justify-content:space-between;height:54px;position:sticky;top:0;z-index:200;box-shadow:0 1px 8px #0000000a;}
 #logo{display:flex;align-items:center;gap:10px;}
 .logo-icon{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#4F8EF7,#A054F7);display:flex;align-items:center;justify-content:center;font-size:14px;}
-.logo-title{font-weight:700;font-size:15px;color:#1a1d2e;}
+.logo-title{font-weight:700;font-size:15px;}
 .logo-badge{font-size:10px;color:#4F8EF7;background:#4F8EF710;padding:2px 7px;border-radius:4px;letter-spacing:.5px;}
-#header-right{display:flex;align-items:center;gap:10px;}
+#header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .upload-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;font-size:12px;cursor:pointer;transition:all .2s;user-select:none;white-space:nowrap;}
 .upload-btn input{display:none;}
 .upload-btn.blue{background:#4F8EF710;border:1px solid #4F8EF740;color:#3a7ef0;}
 .upload-btn.green{background:#54D07A10;border:1px solid #54D07A40;color:#2eaa60;}
 .upload-btn.green.off{background:#f5f5f5;border-color:#e0e3ef;color:#bbb;opacity:.7;cursor:not-allowed;}
+.hdr-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 13px;border-radius:8px;font-size:12px;border:1px solid #e0e3ef;color:#555;background:#fff;cursor:pointer;white-space:nowrap;}
+.hdr-btn:hover{border-color:#4F8EF7;color:#3a7ef0;}
 #user-info{display:flex;align-items:center;gap:8px;font-size:12px;color:#888;}
 #user-photo{width:26px;height:26px;border-radius:50%;border:1px solid #e4e7f0;display:none;}
-.logout-btn{padding:5px 11px;border-radius:7px;font-size:11px;border:1px solid #e0e3ef;color:#888;background:transparent;cursor:pointer;}
-.logout-btn:hover{border-color:#aaa;color:#444;}
+.logout-btn{padding:5px 10px;border-radius:7px;font-size:11px;border:1px solid #e0e3ef;color:#888;background:transparent;cursor:pointer;}
 #sync-badge{font-size:10px;padding:3px 9px;border-radius:6px;display:none;}
 #sync-badge.syncing{background:#4F8EF710;color:#4F8EF7;border:1px solid #4F8EF730;}
 #sync-badge.saved{background:#54D07A10;color:#2eaa60;border:1px solid #54D07A30;}
 
-/* 본문 */
 #content{padding:18px 24px;display:none;}
 
-/* 빈 상태 */
 #empty{display:none;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:10px;color:#aaa;text-align:center;}
 #empty .big{font-size:48px;}
 #empty h2{font-size:16px;font-weight:600;color:#888;}
-.col-tags{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:14px;}
 .ctag{font-size:10px;color:#4F8EF7;background:#4F8EF710;padding:2px 8px;border-radius:4px;}
 
-/* 요약 카드 */
 .sum-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
 .sum-card{background:#fff;border-radius:11px;padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 2px 10px #0000000a;}
 .sum-card .lbl{font-size:10px;color:#aaa;letter-spacing:.3px;margin-bottom:8px;}
 .sum-card .val{font-size:20px;font-weight:700;letter-spacing:-.5px;}
 .sum-card .ico{font-size:20px;opacity:.3;}
 
-/* 거래처 카드 */
 #store-cards{display:flex;gap:10px;margin-bottom:16px;overflow-x:auto;padding-bottom:3px;}
 .store-card{background:#fff;border:1px solid #e4e7f0;border-radius:11px;padding:12px 15px;min-width:148px;cursor:pointer;transition:all .18s;flex-shrink:0;box-shadow:0 2px 8px #0000000a;}
-.sc-name{font-size:10px;font-weight:600;margin-bottom:4px;letter-spacing:.3px;}
-.sc-qty{font-size:18px;font-weight:700;margin-bottom:7px;color:#1a1d2e;}
+.sc-name{font-size:10px;font-weight:600;margin-bottom:4px;}
+.sc-qty{font-size:18px;font-weight:700;margin-bottom:7px;}
 .sc-rev{font-size:10px;color:#aaa;margin-bottom:6px;}
 .sc-sub{font-size:9px;color:#ccc;margin-top:3px;}
 
-/* 통계 패널 */
 #stats-panel{background:#fff;border:1px solid #e4e7f0;border-radius:13px;padding:16px 20px;box-shadow:0 2px 10px #0000000a;}
 #ctrl-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
 .store-filters{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
 .filter-lbl{font-size:10px;color:#aaa;margin-right:2px;white-space:nowrap;}
 .fbtn{padding:4px 11px;border-radius:20px;font-size:11px;border:1px solid #e0e3ef;color:#aaa;background:transparent;transition:all .14s;white-space:nowrap;}
-.fbtn.on{border-color:currentColor;background:#fff;}
+.fbtn.on{border-color:currentColor;}
 #tab-date-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .tab-grp{display:flex;background:#F5F6FA;border-radius:7px;padding:3px;gap:2px;}
 .tbtn{padding:5px 13px;border-radius:5px;font-size:12px;color:#aaa;transition:all .18s;}
@@ -112,9 +98,7 @@ input[type=date]{font-family:inherit;}
 #date-range input[type=date]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.5;}
 #date-range .sep{color:#ccc;font-size:11px;}
 .date-clear{font-size:10px;color:#aaa;background:#e4e7f0;border:none;border-radius:4px;padding:2px 7px;cursor:pointer;}
-.date-clear:hover{color:#555;}
 
-/* 기간 블록 */
 .period-block{border:1px solid #e4e7f0;border-radius:9px;overflow:hidden;margin-bottom:9px;}
 .period-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;background:#fff;transition:background .14s;}
 .period-hd:hover,.period-hd.open{background:#F8F9FC;}
@@ -125,7 +109,6 @@ input[type=date]{font-family:inherit;}
 .parr{color:#ccc;font-size:12px;transition:transform .18s;display:inline-block;}
 .parr.open{transform:rotate(180deg);}
 
-/* 테이블 */
 table{width:100%;border-collapse:collapse;font-size:12px;}
 thead tr{background:#F8F9FC;}
 thead th{padding:7px 12px;font-size:10px;color:#aaa;font-weight:500;letter-spacing:.3px;border-bottom:1px solid #e4e7f0;white-space:nowrap;}
@@ -136,42 +119,77 @@ tbody td{padding:8px 12px;color:#444;}
 tfoot tr{background:#F8F9FC;border-top:1px solid #e4e7f0;}
 tfoot td{padding:7px 12px;font-weight:700;}
 
-/* 페이지네이션 */
 #pagination{display:flex;justify-content:center;gap:5px;margin-top:12px;}
 .pgbtn{width:30px;height:30px;border-radius:6px;font-size:12px;border:1px solid #e4e7f0;color:#aaa;background:#fff;}
 .pgbtn.on{border-color:#4F8EF7;background:#4F8EF710;color:#4F8EF7;}
 .pgbtn:disabled{color:#ddd;cursor:default;}
 
-/* 토스트 */
-#toast{position:fixed;top:62px;right:16px;z-index:999;padding:9px 16px;border-radius:9px;font-size:12px;box-shadow:0 8px 24px #00000018;display:none;animation:fadeUp .22s ease;}
+#toast{position:fixed;top:62px;right:16px;z-index:9999;padding:9px 16px;border-radius:9px;font-size:12px;box-shadow:0 8px 24px #00000018;display:none;animation:fadeUp .22s ease;}
 .tok{background:#f0fff6;border:1px solid #54D07A55;color:#2eaa60;}
 .terr{background:#fff0f0;border:1px solid #F7545455;color:#e03030;}
+.twarn{background:#fffbe6;border:1px solid #F7D45455;color:#b07800;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .no-data{text-align:center;padding:48px 0;color:#aaa;}
+
+/* ── 모달 ── */
+.modal-overlay{position:fixed;inset:0;background:#0000004a;z-index:500;display:none;align-items:center;justify-content:center;}
+.modal-overlay.show{display:flex;}
+.modal{background:#fff;border-radius:14px;box-shadow:0 16px 48px #00000022;width:92%;max-width:900px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;}
+.modal-hd{padding:16px 22px;border-bottom:1px solid #e4e7f0;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.modal-hd h2{font-size:15px;font-weight:700;}
+.modal-hd-right{display:flex;align-items:center;gap:8px;}
+.modal-close{font-size:18px;color:#aaa;cursor:pointer;line-height:1;margin-left:8px;}
+.modal-body{padding:18px 22px;overflow-y:auto;flex:1;}
+.modal-foot{padding:12px 22px;border-top:1px solid #e4e7f0;display:flex;justify-content:flex-end;gap:8px;flex-shrink:0;}
+.btn{padding:8px 18px;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;border:none;}
+.btn-primary{background:#4F8EF7;color:#fff;}.btn-primary:hover{background:#3a7ef0;}
+.btn-secondary{background:#f5f6fa;color:#666;border:1px solid #e0e3ef;}.btn-secondary:hover{border-color:#aaa;}
+.btn-danger{background:#fff0f0;color:#e03030;border:1px solid #F7545433;}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:6px;}
+
+/* ── 제품 편집 모달 ── */
+.prod-row{border:1px solid #e4e7f0;border-radius:10px;padding:14px 16px;margin-bottom:10px;background:#fff;transition:box-shadow .15s;}
+.prod-row:hover{box-shadow:0 2px 12px #0000000e;}
+.prod-row-top{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.prod-name-input{flex:1;border:1px solid #e4e7f0;border-radius:7px;padding:7px 12px;font-size:13px;font-weight:600;color:#1a1d2e;outline:none;}
+.prod-name-input:focus{border-color:#4F8EF7;}
+.prod-supplier{font-size:11px;color:#aaa;white-space:nowrap;}
+.codes-area{display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.code-chip{display:flex;align-items:center;gap:4px;background:#F5F6FA;border:1px solid #e4e7f0;border-radius:6px;padding:3px 4px 3px 8px;}
+.code-chip .code-label{font-size:10px;color:#aaa;margin-right:2px;white-space:nowrap;}
+.code-chip input{border:none;background:transparent;font-size:12px;color:#333;outline:none;width:110px;padding:1px 0;}
+.code-chip input.code1{font-weight:700;color:#4F8EF7;}
+.code-chip .chip-del{font-size:13px;color:#ccc;cursor:pointer;line-height:1;padding:0 3px;}
+.code-chip .chip-del:hover{color:#e03030;}
+.add-code-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:6px;font-size:11px;color:#4F8EF7;background:#4F8EF710;border:1px dashed #4F8EF755;cursor:pointer;}
+.add-code-btn:hover{background:#4F8EF720;}
+.prod-search{width:100%;border:1px solid #e4e7f0;border-radius:8px;padding:8px 12px;font-size:12px;outline:none;margin-bottom:14px;}
+.prod-search:focus{border-color:#4F8EF7;}
+.dup-warn{background:#fffbe6;border:1px solid #F7D45455;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:#b07800;}
+
+/* 판매 편집 */
+.sales-edit-table{width:100%;border-collapse:collapse;font-size:12px;}
+.sales-edit-table th{padding:7px 10px;font-size:10px;color:#aaa;font-weight:500;border-bottom:1px solid #e4e7f0;text-align:left;white-space:nowrap;background:#F8F9FC;}
+.sales-edit-table td{padding:5px 6px;border-bottom:1px solid #F5F6FA;vertical-align:middle;}
+.sales-edit-table input{border:1px solid #e4e7f0;border-radius:5px;padding:4px 7px;font-size:12px;color:#333;outline:none;}
+.sales-edit-table input:focus{border-color:#4F8EF7;}
 </style>
 </head>
 <body>
 
-<!-- 로딩 -->
-<div id="loading">
-  <div class="spinner"></div>
-  <div style="font-size:12px;color:#484b5a;">연결 중...</div>
-</div>
+<div id="loading"><div class="spinner"></div><div style="font-size:12px;color:#888;">연결 중...</div></div>
 
-<!-- 로그인 -->
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">📊</div>
     <h1>매출 대시보드</h1>
     <p>Google 계정으로 로그인하여 시작하세요</p>
     <button class="google-btn" onclick="googleLogin()">
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/>
-      Google로 로그인
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/>Google로 로그인
     </button>
   </div>
 </div>
 
-<!-- 헤더 -->
 <div id="header">
   <div id="logo">
     <div class="logo-icon">📊</div>
@@ -180,17 +198,12 @@ tfoot td{padding:7px 12px;font-weight:700;}
   </div>
   <div id="header-right">
     <span id="sync-badge"></span>
-    <label class="upload-btn blue">
-      📋 제품 리스트 업로드
-      <input type="file" id="product-file" accept=".xlsx,.xls,.csv"/>
-    </label>
-    <label class="upload-btn green off" id="sales-lbl">
-      📂 판매 데이터 업로드
-      <input type="file" id="sales-file" accept=".xlsx,.xls,.csv" disabled/>
-    </label>
+    <label class="upload-btn blue">📋 제품 업로드<input type="file" id="product-file" accept=".xlsx,.xls,.csv"/></label>
+    <label class="upload-btn green off" id="sales-lbl">📂 판매 업로드<input type="file" id="sales-file" accept=".xlsx,.xls,.csv" disabled/></label>
+    <button class="hdr-btn" onclick="openProdModal()">⚙️ 제품 관리</button>
+    <button class="hdr-btn" onclick="openSalesModal()">✏️ 판매 편집</button>
     <div id="user-info">
-      <img id="user-photo"/>
-      <span id="user-name"></span>
+      <img id="user-photo"/><span id="user-name"></span>
       <button class="logout-btn" onclick="logout()">로그아웃</button>
     </div>
   </div>
@@ -198,25 +211,64 @@ tfoot td{padding:7px 12px;font-weight:700;}
 
 <div id="toast"></div>
 
+<!-- ── 제품 관리 모달 ── -->
+<div class="modal-overlay" id="prod-modal">
+  <div class="modal">
+    <div class="modal-hd">
+      <h2>⚙️ 제품 관리</h2>
+      <div class="modal-hd-right">
+        <span id="prod-count" style="font-size:11px;color:#aaa;"></span>
+        <span class="modal-close" onclick="document.getElementById('prod-modal').classList.remove('show')">✕</span>
+      </div>
+    </div>
+    <div class="modal-body">
+      <input class="prod-search" id="prod-search" placeholder="🔍 제품명 또는 코드로 검색..." oninput="renderProdModal()"/>
+      <div id="dup-warn-area"></div>
+      <div id="prod-list"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="document.getElementById('prod-modal').classList.remove('show')">닫기</button>
+      <button class="btn btn-primary" onclick="saveProdModal()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── 판매 편집 모달 ── -->
+<div class="modal-overlay" id="sales-modal">
+  <div class="modal">
+    <div class="modal-hd">
+      <h2>✏️ 판매 데이터 편집</h2>
+      <div class="modal-hd-right">
+        <span id="sales-count" style="font-size:11px;color:#aaa;"></span>
+        <span class="modal-close" onclick="document.getElementById('sales-modal').classList.remove('show')">✕</span>
+      </div>
+    </div>
+    <div class="modal-body" id="sales-modal-body"></div>
+    <div class="modal-foot">
+      <button class="btn btn-secondary" onclick="document.getElementById('sales-modal').classList.remove('show')">닫기</button>
+      <button class="btn btn-primary" onclick="saveSalesModal()">💾 저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 본문 -->
 <div id="content">
   <div id="empty">
     <div class="big">📁</div>
     <h2>제품 리스트 파일을 먼저 업로드하세요</h2>
-    <p style="font-size:12px;">공급사 / 코드 / 품명이 포함된 .xlsx 파일</p>
-    <div class="col-tags" style="margin-top:18px;">
-      <span style="font-size:10px;color:#555;margin-right:3px;">판매 데이터 컬럼 →</span>
-      <span class="ctag">날짜</span><span class="ctag">거래처</span>
-      <span class="ctag">품목명코드</span><span class="ctag">품목명[규격]</span>
-      <span class="ctag">수량</span><span class="ctag">공급가액</span><span class="ctag">부가세</span><span class="ctag">합계</span>
+    <p style="font-size:12px;margin-top:4px;">공급사 / 코드1 / 코드2 / 쿠팡코드 / 품명 컬럼이 포함된 .xlsx 파일</p>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:14px;">
+      <span style="font-size:10px;color:#aaa;">판매 데이터 →</span>
+      <span class="ctag">날짜</span><span class="ctag">거래처</span><span class="ctag">품목명코드</span>
+      <span class="ctag">품목명[규격]</span><span class="ctag">수량</span><span class="ctag">공급가액</span><span class="ctag">합계</span>
     </div>
   </div>
 
   <div id="dashboard" style="display:none;">
     <div class="sum-grid">
       <div class="sum-card" style="border:1px solid #4F8EF718;"><div><div class="lbl">총 판매 수량</div><div class="val" id="s-qty" style="color:#4F8EF7;">-</div></div><div class="ico">📦</div></div>
-      <div class="sum-card" style="border:1px solid #54D07A18;"><div><div class="lbl">총 합계금액</div><div class="val" id="s-total" style="color:#54D07A;">-</div></div><div class="ico">💰</div></div>
-      <div class="sum-card" style="border:1px solid #F7A54F18;"><div><div class="lbl">공급가액 합계</div><div class="val" id="s-supply" style="color:#F7A54F;">-</div></div><div class="ico">🏷️</div></div>
+      <div class="sum-card" style="border:1px solid #54D07A18;"><div><div class="lbl">총 합계금액</div><div class="val" id="s-total" style="color:#2eaa60;">-</div></div><div class="ico">💰</div></div>
+      <div class="sum-card" style="border:1px solid #F7A54F18;"><div><div class="lbl">공급가액 합계</div><div class="val" id="s-supply" style="color:#e07820;">-</div></div><div class="ico">🏷️</div></div>
       <div class="sum-card" style="border:1px solid #A054F718;"><div><div class="lbl">거래처 수</div><div class="val" id="s-stores" style="color:#A054F7;">-</div></div><div class="ico">🏪</div></div>
     </div>
     <div id="store-cards"></div>
@@ -244,20 +296,21 @@ tfoot td{padding:7px 12px;font-weight:700;}
 </div>
 
 <script>
-// ── Firebase 초기화 ───────────────────────────────────────────
 firebase.initializeApp(FIREBASE_CONFIG);
-const auth = firebase.auth();
-const db   = firebase.database();
+const auth=firebase.auth();
+const db=firebase.database();
 
-// ── 상태 ─────────────────────────────────────────────────────
-const S = {
-  products:[], sales:[],
-  tab:'일별', selStore:'전체',
-  dateFrom:'', dateTo:'',
-  expanded:null, page:1, PG:20, uid:null
-};
+// ── 데이터 구조 ──────────────────────────────────────────────
+// products: [{ code1, name, supplier, aliases:[{label,code}, ...] }, ...]
+//   alias label 예: '코드2', '쿠팡코드', '이마트코드', '메가마트코드', '코드3', ...
+// sales: [{ date, store, code, productName, supplier, qty, supply, vat, total }, ...]
+
+const S={products:[],sales:[],tab:'일별',selStore:'전체',dateFrom:'',dateTo:'',expanded:null,page:1,PG:20,uid:null};
+let editProds=[]; // 제품 모달 편집용 deep copy
+let editSales=[]; // 판매 모달 편집용 deep copy
+
 const PAL=['#4F8EF7','#54D07A','#F7A54F','#F75496','#A054F7','#54C8F7','#F7D454','#F75454','#54F7C8','#C854F7'];
-const fmt = n => (n!=null&&!isNaN(n)&&n!=='') ? Number(n).toLocaleString() : '-';
+const fmt=n=>(n!=null&&!isNaN(n)&&n!=='')?Number(n).toLocaleString():'-';
 
 function toDS(raw){
   if(!raw&&raw!==0)return null;
@@ -275,22 +328,19 @@ function pDisp(p){
 }
 function toast(msg,type='ok'){
   const el=document.getElementById('toast');
-  el.textContent=msg;el.className=type==='ok'?'tok':'terr';
-  el.style.display='block';setTimeout(()=>el.style.display='none',3200);
+  el.textContent=msg;el.className=type==='ok'?'tok':type==='warn'?'twarn':'terr';
+  el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',3500);
 }
-function syncBadge(state){
+function syncBadge(s){
   const el=document.getElementById('sync-badge');
-  if(state==='syncing'){el.textContent='⏳ 저장 중...';el.className='syncing';el.style.display='inline-block';}
-  else if(state==='saved'){el.textContent='✅ 저장됨';el.className='saved';el.style.display='inline-block';setTimeout(()=>el.style.display='none',2500);}
+  if(s==='syncing'){el.textContent='⏳ 저장 중...';el.className='syncing';el.style.display='inline-block';}
+  else if(s==='saved'){el.textContent='✅ 저장됨';el.className='saved';el.style.display='inline-block';setTimeout(()=>el.style.display='none',2500);}
   else el.style.display='none';
 }
 
 // ── 인증 ─────────────────────────────────────────────────────
-function googleLogin(){
-  const p=new firebase.auth.GoogleAuthProvider();
-  auth.signInWithPopup(p).catch(e=>toast('로그인 실패: '+e.message,'err'));
-}
-function logout(){ auth.signOut(); }
+function googleLogin(){auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()).catch(e=>toast('로그인 실패: '+e.message,'err'));}
+function logout(){auth.signOut();}
 
 auth.onAuthStateChanged(user=>{
   document.getElementById('loading').style.display='none';
@@ -311,27 +361,23 @@ auth.onAuthStateChanged(user=>{
   }
 });
 
-// ── DB 연동 ──────────────────────────────────────────────────
-function ref(path){ return db.ref(`users/${S.uid}/${path}`); }
-
+// ── DB ───────────────────────────────────────────────────────
+function ref(p){return db.ref(`users/${S.uid}/${p}`);}
 function loadFromDB(){
   ref('products').once('value').then(snap=>{
     const v=snap.val();
-    if(v){ S.products=Object.values(v); enableSalesUpload(); }
+    if(v){S.products=Object.values(v);enableSalesUpload();}
     return ref('sales').once('value');
   }).then(snap=>{
-    const v=snap.val();
-    if(v) S.sales=Object.values(v);
-    showDashboard(); render();
+    const v=snap.val();if(v)S.sales=Object.values(v);
+    showDashboard();render();
   }).catch(e=>toast('로드 오류: '+e.message,'err'));
 }
-
-function saveToDB(key, arr){
+function saveToDB(key,arr,cb){
   syncBadge('syncing');
   const obj={};arr.forEach((x,i)=>obj[i]=x);
-  ref(key).set(obj).then(()=>syncBadge('saved')).catch(e=>{syncBadge('');toast('저장 오류: '+e.message,'err');});
+  ref(key).set(obj).then(()=>{syncBadge('saved');if(cb)cb();}).catch(e=>{syncBadge('');toast('저장 오류: '+e.message,'err');});
 }
-
 function enableSalesUpload(){
   document.getElementById('sales-file').disabled=false;
   document.getElementById('sales-lbl').classList.remove('off');
@@ -342,7 +388,18 @@ function showDashboard(){
   document.getElementById('dashboard').style.display=has?'block':'none';
 }
 
-// ── 제품 리스트 업로드 ───────────────────────────────────────
+// ── 코드 → 제품 매핑 빌더 ────────────────────────────────────
+// 모든 코드(code1 + aliases)를 key로 productName 반환하는 Map
+function buildCodeMap(){
+  const map=new Map();
+  S.products.forEach(p=>{
+    if(p.code1) map.set(String(p.code1).trim(), p.name);
+    (p.aliases||[]).forEach(a=>{ if(a.code) map.set(String(a.code).trim(), p.name); });
+  });
+  return map;
+}
+
+// ── 제품 파일 파싱 (새 구조로) ───────────────────────────────
 document.getElementById('product-file').addEventListener('change',function(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
@@ -351,36 +408,71 @@ document.getElementById('product-file').addEventListener('change',function(e){
       const wb=XLSX.read(ev.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      let hi=rows.findIndex(r=>r.some(c=>String(c).includes('공급사')));
-      if(hi<0)hi=1;
+
+      // 헤더 찾기
+      let hi=rows.findIndex(r=>r.some(c=>String(c).includes('코드1')||String(c).includes('코드 1')));
+      if(hi<0) hi=rows.findIndex(r=>r.some(c=>String(c).includes('공급사')));
+      if(hi<0) hi=1;
+
       const hdrs=rows[hi].map(h=>String(h).trim());
-      const si=hdrs.findIndex(h=>h.includes('공급사'));
-      const ni=hdrs.findIndex(h=>h.includes('품명'));
-      const cis=hdrs.map((h,i)=>h.includes('코드')?i:-1).filter(i=>i>=0&&i!==si);
-      const list=[];
-      const add=(code,name,sup)=>{
-        code=String(code||'').trim();name=String(name||'').trim();
-        if(!code||!name)return;
-        if(!list.find(p=>p.code===code&&p.name===name))list.push({code,name,supplier:String(sup||'').trim()});
-      };
+      const ci=(kws)=>hdrs.findIndex(h=>kws.some(k=>h.replace(/\s/g,'').toLowerCase().includes(k.replace(/\s/g,'').toLowerCase())));
+
+      const supI  = ci(['공급사']);
+      const c1I   = ci(['코드1','코드 1']);
+      const nameI = ci(['품명','제품명']);
+
+      // 나머지 코드 컬럼 자동 감지 (코드1 제외한 코드 컬럼)
+      const aliasCols = hdrs.map((h,i)=>{
+        if(i===supI||i===c1I||i===nameI) return null;
+        if(h.includes('코드')||h.toLowerCase().includes('code')) return {i, label:h};
+        return null;
+      }).filter(Boolean);
+
+      const products=[];
       for(let i=hi+1;i<rows.length;i++){
-        const r=rows[i];const nm=r[ni];const sup=r[si];
-        if(!String(nm||'').trim())continue;
-        cis.forEach(ci=>{const c=String(r[ci]||'').trim();if(c)add(c,nm,sup);});
-        add(nm,nm,sup);
+        const r=rows[i];
+        const name=String(r[nameI]||'').trim();
+        const code1=String(r[c1I]||'').trim();
+        if(!name&&!code1) continue;
+
+        const aliases=[];
+        aliasCols.forEach(col=>{
+          const v=String(r[col.i]||'').trim();
+          if(v) aliases.push({label:col.label, code:v});
+        });
+
+        products.push({
+          code1: code1||name,
+          name,
+          supplier: String(r[supI]||'').trim(),
+          aliases
+        });
       }
-      S.products=list;S.sales=[];S.selStore='전체';S.page=1;
+
+      // 중복 코드1 감지
+      const c1Map={};
+      products.forEach(p=>{
+        if(!c1Map[p.code1]) c1Map[p.code1]=[];
+        c1Map[p.code1].push(p.name);
+      });
+      const dups=Object.entries(c1Map).filter(([,names])=>names.length>1);
+      if(dups.length){
+        const msg=dups.slice(0,5).map(([c,ns])=>`코드1 [${c}] → ${ns.join(', ')}`).join('\n');
+        if(!confirm(`⚠️ 코드1 중복 ${dups.length}건!\n\n${msg}\n\n계속하시겠습니까?`)){this.value='';return;}
+      }
+
+      S.products=products; S.sales=[]; S.selStore='전체'; S.page=1;
       enableSalesUpload();
-      saveToDB('products',list);
+      saveToDB('products',products);
       ref('sales').remove();
-      showDashboard();render();
-      toast(`✅ 제품 ${[...new Set(list.map(p=>p.name))].length}개 저장 완료`);
+      showDashboard(); render();
+      toast(`✅ 제품 ${products.length}개 저장 완료`+(dups.length?` (중복 ${dups.length}건)`:''), dups.length?'warn':'ok');
     }catch(e){toast('❌ 제품 파일 오류: '+e.message,'err');}
   };
-  reader.readAsArrayBuffer(file);this.value='';
+  reader.readAsArrayBuffer(file); this.value='';
 });
 
-// ── 판매 데이터 업로드 ───────────────────────────────────────
+// ── 판매 데이터 파싱 ─────────────────────────────────────────
 document.getElementById('sales-file').addEventListener('change',function(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
@@ -390,35 +482,53 @@ document.getElementById('sales-file').addEventListener('change',function(e){
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       let hi=rows.findIndex(r=>r.some(c=>String(c).includes('날짜')||String(c).toLowerCase()==='date'));
-      if(hi<0)hi=0;
+      if(hi<0) hi=0;
       const hdrs=rows[hi].map(h=>String(h).trim());
       const fi=kws=>hdrs.findIndex(h=>kws.some(k=>h.includes(k)));
-      const dateI  = fi(['날짜','date','일자']);
-      const stCodeI= fi(['거래처코드']);
-      const stNmI  = stCodeI>=0 ? stCodeI+1 : fi(['거래처']);
-      const codeI  = fi(['품목명[규격]코드','품목코드','품목명코드']);
-      const prodI  = fi(['품목명[규격]','품목명','제품명']);
-      const qtyI   = fi(['수량','qty']);
-      const supI   = fi(['공급가액','공급가']);
-      const vatI   = fi(['부가세','vat']);
-      const totalI = fi(['합계','total']);
+      const dateI=fi(['날짜','date','일자']);
+      const stCI =fi(['거래처코드']);
+      const stNI =stCI>=0?stCI+1:fi(['거래처']);
+      const codeI=fi(['품목명[규격]코드','품목코드','품목명코드']);
+      const prodI=fi(['품목명[규격]','품목명','제품명']);
+      const qtyI =fi(['수량','qty']);
+      const supI =fi(['공급가액','공급가']);
+      const vatI =fi(['부가세','vat']);
+      const totI =fi(['합계','total']);
+
+      const codeMap=buildCodeMap();
 
       const newRows=[];
       for(let i=hi+1;i<rows.length;i++){
-        const r=rows[i];
-        if(!r[dateI])continue;
-        const ds=toDS(r[dateI]);if(!ds)continue;
+        const r=rows[i]; if(!r[dateI]) continue;
+        const ds=toDS(r[dateI]); if(!ds) continue;
         const code=String(r[codeI]||'').trim();
         const prodRaw=String(r[prodI]||'').trim();
         const prodName=prodRaw.replace(/\s*\[.*?\]\s*$/,'').trim();
-        const matched=S.products.find(p=>p.code===code)||S.products.find(p=>p.name===prodName);
-        const store=String(r[stNmI]||r[stCodeI]||'').trim()||'기타';
-        newRows.push({date:ds,store,code,
-          productName:matched?matched.name:prodName,
-          supplier:matched?matched.supplier:'',
-          qty:Number(r[qtyI])||0,supply:Number(r[supI])||0,
-          vat:Number(r[vatI])||0,total:Number(r[totalI])||0});
+        // 코드로 먼저 매핑, 없으면 품명으로 매핑
+        const mappedName=codeMap.get(code)||codeMap.get(prodName)||prodName;
+        const matchedProd=S.products.find(p=>p.name===mappedName);
+        const store=String(r[stNI]||r[stCI]||'').trim()||'기타';
+        newRows.push({
+          date:ds, store, code,
+          productName:mappedName,
+          supplier:matchedProd?matchedProd.supplier:'',
+          qty:Number(r[qtyI])||0,
+          supply:Number(r[supI])||0,
+          vat:Number(r[vatI])||0,
+          total:Number(r[totI])||0
+        });
       }
+
+      // 판매 중복 감지 (같은 날짜 + 같은 거래처)
+      const existing=new Set(S.sales.map(r=>`${r.date}||${r.store}`));
+      const dupSet=new Set();
+      newRows.forEach(r=>{const k=`${r.date}||${r.store}`;if(existing.has(k))dupSet.add(k);});
+      if(dupSet.size){
+        const list=[...dupSet].slice(0,5).map(k=>{const[d,s]=k.split('||');return `${d} / ${s}`;}).join('\n');
+        const more=dupSet.size>5?`\n외 ${dupSet.size-5}건`:'';
+        if(!confirm(`⚠️ 이미 등록된 날짜+거래처 ${dupSet.size}건!\n\n${list}${more}\n\n기존에 합산하여 계속하시겠습니까?`)){this.value='';return;}
+      }
+
       const all=[...S.sales,...newRows];
       const map={};
       all.forEach(row=>{
@@ -426,7 +536,8 @@ document.getElementById('sales-file').addEventListener('change',function(e){
         if(!map[k])map[k]={...row};
         else{map[k].qty+=row.qty;map[k].supply+=row.supply;map[k].vat+=row.vat;map[k].total+=row.total;}
       });
-      S.sales=Object.values(map);S.page=1;S.expanded=null;
+      S.sales=Object.values(map); S.page=1; S.expanded=null;
+
       const dates=S.sales.map(r=>r.date).sort();
       if(dates.length){
         ['date-from','date-to'].forEach(id=>{
@@ -434,12 +545,170 @@ document.getElementById('sales-file').addEventListener('change',function(e){
           document.getElementById(id).max=dates[dates.length-1];
         });
       }
-      saveToDB('sales',S.sales);
-      render();
-      toast(`✅ 판매 데이터 ${newRows.length}행 저장 완료`);
+      saveToDB('sales',S.sales); render();
+      toast(`✅ ${newRows.length}행 저장`+(dupSet.size?` (중복 ${dupSet.size}건 합산)`:''), dupSet.size?'warn':'ok');
     }catch(e){toast('❌ 판매 데이터 오류: '+e.message,'err');}
   };
-  reader.readAsArrayBuffer(file);this.value='';
+  reader.readAsArrayBuffer(file); this.value='';
+});
+
+// ═══════════════════════════════════════════════════════════
+// ── 제품 관리 모달 ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+function openProdModal(){
+  if(!S.products.length){toast('제품 리스트가 없습니다','err');return;}
+  editProds=JSON.parse(JSON.stringify(S.products));
+  document.getElementById('prod-search').value='';
+  renderProdModal();
+  document.getElementById('prod-modal').classList.add('show');
+}
+
+function renderProdModal(){
+  const q=document.getElementById('prod-search').value.trim().toLowerCase();
+  const list=q
+    ? editProds.filter(p=>
+        p.name.toLowerCase().includes(q)||
+        String(p.code1||'').toLowerCase().includes(q)||
+        (p.aliases||[]).some(a=>String(a.code||'').toLowerCase().includes(q))
+      )
+    : editProds;
+
+  document.getElementById('prod-count').textContent=`${editProds.length}개 제품`;
+
+  // 중복 코드1 감지
+  const c1Map={};
+  editProds.forEach(p=>{if(p.code1){if(!c1Map[p.code1])c1Map[p.code1]=0;c1Map[p.code1]++;}});
+  const dupC1=Object.entries(c1Map).filter(([,n])=>n>1).map(([c])=>c);
+  const warnEl=document.getElementById('dup-warn-area');
+  if(dupC1.length){
+    warnEl.innerHTML=`<div class="dup-warn">⚠️ 코드1 중복 ${dupC1.length}건: ${dupC1.join(', ')}</div>`;
+  } else warnEl.innerHTML='';
+
+  document.getElementById('prod-list').innerHTML=list.map((p,_)=>{
+    const gi=editProds.indexOf(p); // 실제 인덱스
+    const aliases=p.aliases||[];
+    const aliasHtml=aliases.map((a,ai)=>`
+      <div class="code-chip">
+        <span class="code-label">${escH(a.label)}</span>
+        <input value="${escH(a.code)}" placeholder="코드" oninput="editProds[${gi}].aliases[${ai}].code=this.value" title="${escH(a.label)}"/>
+        <span class="chip-del" onclick="removeAlias(${gi},${ai})" title="삭제">✕</span>
+      </div>`).join('');
+
+    return `<div class="prod-row" id="prod-row-${gi}">
+      <div class="prod-row-top">
+        <input class="prod-name-input" value="${escH(p.name)}" placeholder="제품명"
+          oninput="editProds[${gi}].name=this.value" title="제품명"/>
+        <span class="prod-supplier">${escH(p.supplier||'')}</span>
+        <button class="btn btn-danger btn-sm" onclick="deleteProd(${gi})" title="제품 삭제">🗑 삭제</button>
+      </div>
+      <div class="codes-area">
+        <div class="code-chip" style="background:#EEF4FF;border-color:#4F8EF740;">
+          <span class="code-label" style="color:#4F8EF7;">코드1</span>
+          <input class="code1" value="${escH(p.code1||'')}" placeholder="코드1(기본키)"
+            oninput="editProds[${gi}].code1=this.value" title="코드1 (기본 식별 코드)"/>
+        </div>
+        ${aliasHtml}
+        <button class="add-code-btn" onclick="addAlias(${gi})">＋ 코드 추가</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function addAlias(gi){
+  if(!editProds[gi].aliases) editProds[gi].aliases=[];
+  // 자동 라벨 제안: 기존 라벨 기반으로 다음 번호
+  const existing=editProds[gi].aliases.map(a=>a.label);
+  const defaults=['코드2','쿠팡코드','이마트코드','메가마트코드','코드3','코드4','코드5'];
+  const label=defaults.find(d=>!existing.includes(d))||`코드${existing.length+2}`;
+  editProds[gi].aliases.push({label, code:''});
+  renderProdModal();
+  // 포커스를 새로 추가된 input으로
+  setTimeout(()=>{
+    const row=document.getElementById(`prod-row-${gi}`);
+    if(row){const inputs=row.querySelectorAll('.code-chip input');if(inputs.length)inputs[inputs.length-1].focus();}
+  },50);
+}
+
+function removeAlias(gi,ai){
+  editProds[gi].aliases.splice(ai,1);
+  renderProdModal();
+}
+
+function deleteProd(gi){
+  if(!confirm(`"${editProds[gi].name}" 제품을 삭제하시겠습니까?`)) return;
+  editProds.splice(gi,1);
+  renderProdModal();
+}
+
+function saveProdModal(){
+  // 빈 코드1 경고
+  const empty=editProds.filter(p=>!String(p.code1||'').trim());
+  if(empty.length){
+    toast(`⚠️ 코드1이 비어있는 제품 ${empty.length}개가 있습니다`,'warn');return;
+  }
+  S.products=editProds;
+  // 판매 데이터의 productName 재매핑
+  const codeMap=buildCodeMap();
+  S.sales=S.sales.map(s=>{
+    const mapped=codeMap.get(s.code)||codeMap.get(s.productName)||s.productName;
+    const prod=S.products.find(p=>p.name===mapped);
+    return {...s, productName:mapped, supplier:prod?prod.supplier:s.supplier};
+  });
+  saveToDB('products',S.products,()=>{
+    saveToDB('sales',S.sales,()=>{
+      showDashboard(); render();
+      toast('✅ 제품 저장 완료. 판매 데이터 코드 재매핑 완료.');
+    });
+  });
+  document.getElementById('prod-modal').classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════════
+// ── 판매 편집 모달 ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+function openSalesModal(){
+  if(!S.sales.length){toast('판매 데이터가 없습니다','err');return;}
+  editSales=JSON.parse(JSON.stringify(S.sales)).sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('sales-count').textContent=`${editSales.length}행`;
+  renderSalesModal();
+  document.getElementById('sales-modal').classList.add('show');
+}
+
+function renderSalesModal(){
+  document.getElementById('sales-modal-body').innerHTML=`
+    <table class="sales-edit-table">
+      <thead><tr>
+        <th>날짜</th><th>거래처</th><th>제품명</th>
+        <th style="text-align:right;">수량</th><th style="text-align:right;">공급가액</th><th style="text-align:right;">합계</th>
+        <th></th>
+      </tr></thead>
+      <tbody>${editSales.map((r,i)=>`
+        <tr>
+          <td><input type="date" value="${r.date}" onchange="editSales[${i}].date=this.value" style="width:130px;"/></td>
+          <td><input value="${escH(r.store||'')}" onchange="editSales[${i}].store=this.value" style="width:80px;"/></td>
+          <td style="font-size:11px;color:#555;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escH(r.productName||'')}">${escH(r.productName||'')}</td>
+          <td><input type="number" value="${r.qty}" onchange="editSales[${i}].qty=Number(this.value)" style="width:70px;text-align:right;"/></td>
+          <td><input type="number" value="${r.supply}" onchange="editSales[${i}].supply=Number(this.value)" style="width:90px;text-align:right;"/></td>
+          <td><input type="number" value="${r.total}" onchange="editSales[${i}].total=Number(this.value)" style="width:90px;text-align:right;"/></td>
+          <td><button class="btn btn-danger btn-sm" onclick="deleteSalesRow(${i})">삭제</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function deleteSalesRow(i){editSales.splice(i,1);document.getElementById('sales-count').textContent=`${editSales.length}행`;renderSalesModal();}
+
+function saveSalesModal(){
+  S.sales=editSales;
+  saveToDB('sales',S.sales,()=>{render();toast('✅ 판매 데이터 저장 완료');});
+  document.getElementById('sales-modal').classList.remove('show');
+}
+
+// 모달 바깥 클릭 닫기
+['prod-modal','sales-modal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('show');});
 });
 
 // ── 이벤트 ───────────────────────────────────────────────────
@@ -448,16 +717,13 @@ document.getElementById('date-from').addEventListener('change',function(){S.date
 document.getElementById('date-to').addEventListener('change',function(){S.dateTo=this.value;S.page=1;S.expanded=null;render();});
 document.querySelectorAll('.tbtn').forEach(btn=>btn.addEventListener('click',function(){S.tab=this.dataset.tab;S.page=1;S.expanded=null;render();}));
 
-// ── 필터 ─────────────────────────────────────────────────────
+// ── 필터 / 렌더 ──────────────────────────────────────────────
 function getFiltered(){
   return S.sales.filter(r=>
     (S.selStore==='전체'||r.store===S.selStore)&&
-    (!S.dateFrom||r.date>=S.dateFrom)&&
-    (!S.dateTo||r.date<=S.dateTo)
+    (!S.dateFrom||r.date>=S.dateFrom)&&(!S.dateTo||r.date<=S.dateTo)
   );
 }
-
-// ── 렌더 ─────────────────────────────────────────────────────
 function render(){renderSummary();renderStoreCards();renderFilterBtns();renderTable();}
 
 function renderSummary(){
@@ -466,8 +732,7 @@ function renderSummary(){
   const tot=f.reduce((a,b)=>a+b.total,0),sup=f.reduce((a,b)=>a+b.supply,0);
   document.getElementById('s-total').textContent=tot?fmt(tot)+'원':'-';
   document.getElementById('s-supply').textContent=sup?fmt(sup)+'원':'-';
-  const stores=[...new Set(S.sales.map(r=>r.store))].filter(Boolean);
-  document.getElementById('s-stores').textContent=stores.length?stores.length+'개':'-';
+  document.getElementById('s-stores').textContent=[...new Set(S.sales.map(r=>r.store))].filter(Boolean).length+'개';
 }
 
 function renderStoreCards(){
@@ -487,15 +752,15 @@ function renderStoreCards(){
     const poly=[`0,${H}`,...pts.map(p=>p.join(',')),[`${W},${H}`]].join(' ');
     const line=pts.map(p=>p.join(',')).join(' ');
     const last=pts[pts.length-1];
-    const id=`g${si}`;
+    const id=`sg${si}`;
     return `<div class="store-card" onclick="setStore('${st}')"
-      style="border-color:${active?color+'55':'#1a1d28'};background:${active?color+'12':'#111420'};">
+      style="border-color:${active?color+'66':'#e4e7f0'};background:${active?color+'0d':'#fff'};">
       <div class="sc-name" style="color:${color};">${st}</div>
-      <div class="sc-qty">${fmt(tQty)}<span style="font-size:10px;color:#484b5a;margin-left:3px;">개</span></div>
+      <div class="sc-qty">${fmt(tQty)}<span style="font-size:10px;color:#aaa;margin-left:3px;">개</span></div>
       <div class="sc-rev">${tRev?fmt(tRev)+'원':'-'}</div>
       <svg width="${W}" height="${H}" style="overflow:visible;display:block;">
         <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${color}" stop-opacity=".3"/>
+          <stop offset="0%" stop-color="${color}" stop-opacity=".25"/>
           <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
         </linearGradient></defs>
         <polygon points="${poly}" fill="url(#${id})"/>
@@ -513,9 +778,9 @@ function renderFilterBtns(){
   const stores=[...new Set(S.sales.map(r=>r.store))].filter(Boolean).sort();
   document.getElementById('store-filter-btns').innerHTML='<span class="filter-lbl">거래처</span>'+
     ['전체',...stores].map((st,si)=>{
-      const color=si===0?'#777':PAL[si%PAL.length];
+      const color=si===0?'#999':PAL[si%PAL.length];
       const on=S.selStore===st;
-      return `<button class="fbtn${on?' on':''}" style="color:${on?color:'#555'};border-color:${on?color:'#252830'};background:${on?color+'18':'transparent'};" onclick="setStore('${st}')">${st}</button>`;
+      return `<button class="fbtn${on?' on':''}" style="color:${on?color:'#aaa'};border-color:${on?color:'#e0e3ef'};background:${on?color+'15':'transparent'};" onclick="setStore('${st}')">${st}</button>`;
     }).join('');
   document.querySelectorAll('.tbtn').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
 }
@@ -534,8 +799,9 @@ function renderTable(){
   const total=Math.max(1,Math.ceil(periods.length/S.PG));
   if(S.page>total)S.page=1;
   const pg=periods.slice((S.page-1)*S.PG,S.page*S.PG);
-  const prods=[...new Set(S.products.map(p=>p.name))].filter(Boolean);
-  const useProds=prods.length?prods:[...new Set(filtered.map(r=>r.productName))].filter(Boolean).sort();
+  const useProds=[...new Set(S.products.map(p=>p.name))].filter(Boolean).length
+    ? [...new Set(S.products.map(p=>p.name))].filter(Boolean)
+    : [...new Set(filtered.map(r=>r.productName))].filter(Boolean).sort();
 
   area.innerHTML=pg.map(period=>{
     const rows=grouped[period];
@@ -550,13 +816,13 @@ function renderTable(){
       const v=agg[prod]||{qty:0,supply:0,total:0};
       const color=PAL[pi%PAL.length];
       const pct=pQty?Math.round((v.qty/pQty)*100):0;
-      const bar=v.qty>0?`<div style="display:flex;align-items:center;gap:4px;"><div style="height:5px;border-radius:3px;background:${color};width:${Math.max(pct,1)}%;max-width:100%;"></div><span style="font-size:9px;color:#484b5a;">${pct}%</span></div>`:'-';
-      return `<tr style="opacity:${v.qty===0?.22:1};">
-        <td style="color:#2e3142;font-size:10px;">${pi+1}</td>
+      const bar=v.qty>0?`<div style="display:flex;align-items:center;gap:4px;"><div style="height:5px;border-radius:3px;background:${color};width:${Math.max(pct,1)}%;max-width:100%;"></div><span style="font-size:9px;color:#aaa;">${pct}%</span></div>`:'-';
+      return `<tr style="opacity:${v.qty===0?.2:1};">
+        <td style="color:#ccc;font-size:10px;">${pi+1}</td>
         <td>${prod}</td>
-        <td class="r" style="font-weight:${v.qty>0?700:400};color:${v.qty>0?color:'#2e3142'};">${v.qty>0?fmt(v.qty):'-'}</td>
-        <td class="r" style="color:${v.supply>0?'#F7A54F':'#2e3142'};">${v.supply>0?fmt(v.supply):'-'}</td>
-        <td class="r" style="color:${v.total>0?'#54D07A':'#2e3142'};">${v.total>0?fmt(v.total):'-'}</td>
+        <td class="r" style="font-weight:${v.qty>0?700:400};color:${v.qty>0?color:'#ccc'};">${v.qty>0?fmt(v.qty):'-'}</td>
+        <td class="r" style="color:${v.supply>0?'#e07820':'#ccc'};">${v.supply>0?fmt(v.supply):'-'}</td>
+        <td class="r" style="color:${v.total>0?'#2eaa60':'#ccc'};">${v.total>0?fmt(v.total):'-'}</td>
         <td>${bar}</td>
       </tr>`;
     }).join('');
@@ -564,7 +830,7 @@ function renderTable(){
       <div class="period-hd${isOpen?' open':''}" onclick="toggleP('${period}')">
         <div style="display:flex;align-items:center;">
           <span class="plabel">${pDisp(period)}</span>
-          <span class="pmeta">판매 <b>${fmt(pQty)}개</b>${pTotal?` &nbsp;·&nbsp; 합계 <b style="color:#54D07A;">${fmt(pTotal)}원</b>`:''}</span>
+          <span class="pmeta">판매 <b>${fmt(pQty)}개</b>${pTotal?` &nbsp;·&nbsp; 합계 <b style="color:#2eaa60;">${fmt(pTotal)}원</b>`:''}</span>
         </div>
         <span class="parr${isOpen?' open':''}">▾</span>
       </div>
@@ -575,10 +841,10 @@ function renderTable(){
         </tr></thead>
         <tbody>${tbody}</tbody>
         <tfoot><tr>
-          <td colspan="2" style="font-size:10px;color:#484b5a;font-weight:400;">합계</td>
+          <td colspan="2" style="font-size:10px;color:#aaa;font-weight:400;">합계</td>
           <td class="r" style="color:#4F8EF7;">${fmt(pQty)}</td>
-          <td class="r" style="color:#F7A54F;">${fmt(pSupply)}</td>
-          <td class="r" style="color:#54D07A;">${fmt(pTotal)}</td>
+          <td class="r" style="color:#e07820;">${fmt(pSupply)}</td>
+          <td class="r" style="color:#2eaa60;">${fmt(pTotal)}</td>
           <td></td>
         </tr></tfoot>
       </table>`:''}
