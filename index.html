@@ -409,11 +409,11 @@ function saveToDB(key,arr,cb){
   let cleaned=arr;
   if(key==='products'){
     cleaned=arr.map(p=>{
-      // aliases 배열을 {label:code} 객체 맵으로 변환 → Firebase가 빈값도 안전 보존
       const aliasMap={};
       (p.aliases||[]).forEach(a=>{ if(a&&a.label) aliasMap[a.label]=a.code||''; });
-      const {_pid,...rest}=p; // _pid 제거
-      return {...rest, aliasMap, aliases:undefined};
+      // _pid, aliases 제거 후 aliasMap만 저장
+      const {_pid, aliases, ...rest}=p;
+      return {...rest, aliasMap};
     });
   }
   const obj={};cleaned.forEach((x,i)=>obj[i]=x);
