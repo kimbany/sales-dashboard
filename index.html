@@ -98,6 +98,15 @@ input{font-family:inherit;}
 #date-range input[type=date]::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.5;}
 #date-range .sep{color:#ccc;font-size:11px;}
 .date-clear{font-size:10px;color:#aaa;background:#e4e7f0;border:none;border-radius:4px;padding:2px 7px;cursor:pointer;}
+/* 빠른 날짜 버튼 */
+.quick-btns{display:flex;gap:4px;align-items:center;}
+.qbtn{padding:4px 9px;border-radius:5px;font-size:11px;border:1px solid #e0e3ef;color:#666;background:#fff;cursor:pointer;transition:all .14s;white-space:nowrap;}
+.qbtn:hover{background:#EEF4FF;border-color:#4F8EF7;color:#4F8EF7;}
+.qbtn.on{background:#4F8EF7;color:#fff;border-color:#4F8EF7;}
+/* 월별 년/월 선택 */
+#month-picker{display:none;align-items:center;gap:5px;background:#F5F6FA;border:1px solid #e4e7f0;border-radius:8px;padding:4px 10px;}
+#month-picker select{background:transparent;border:none;color:#555;font-size:11px;outline:none;cursor:pointer;padding:1px 2px;}
+#month-picker.show{display:flex;}
 
 .period-block{border:1px solid #e4e7f0;border-radius:9px;overflow:hidden;margin-bottom:9px;}
 .period-hd{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;background:#fff;transition:background .14s;}
@@ -321,6 +330,11 @@ tfoot td{padding:7px 12px;font-weight:700;}
       <div id="ctrl-bar">
         <div class="store-filters" id="store-filter-btns"><span class="filter-lbl">거래처</span></div>
         <div id="tab-date-row">
+          <div class="quick-btns" id="quick-btns">
+            <button class="qbtn" onclick="setQuick('today')">오늘</button>
+            <button class="qbtn" onclick="setQuick('week')">최근 일주일</button>
+            <button class="qbtn" onclick="setQuick('month')">최근 한달</button>
+          </div>
           <div class="tab-grp">
             <button class="tbtn on" data-tab="일별">일별</button>
             <button class="tbtn" data-tab="주별">주별</button>
@@ -331,6 +345,12 @@ tfoot td{padding:7px 12px;font-weight:700;}
             <span class="sep">~</span>
             <input type="date" id="date-to"/>
             <button class="date-clear" onclick="clearDates()">전체</button>
+          </div>
+          <div id="month-picker">
+            <select id="mp-year" onchange="applyMonthPicker()"></select>
+            <span style="color:#ccc;font-size:11px;">년</span>
+            <select id="mp-month" onchange="applyMonthPicker()"></select>
+            <span style="color:#ccc;font-size:11px;">월</span>
           </div>
         </div>
       </div>
@@ -1138,10 +1158,95 @@ function saveSalesModal(){
 });
 
 // ── 이벤트 ───────────────────────────────────────────────────
-function clearDates(){S.dateFrom='';S.dateTo='';document.getElementById('date-from').value='';document.getElementById('date-to').value='';S.page=1;S.expanded=null;render();}
-document.getElementById('date-from').addEventListener('change',function(){S.dateFrom=this.value;S.page=1;S.expanded=null;render();});
-document.getElementById('date-to').addEventListener('change',function(){S.dateTo=this.value;S.page=1;S.expanded=null;render();});
-document.querySelectorAll('.tbtn').forEach(btn=>btn.addEventListener('click',function(){S.tab=this.dataset.tab;S.page=1;S.expanded=null;render();}));
+function clearDates(){
+  S.dateFrom='';S.dateTo='';
+  document.getElementById('date-from').value='';
+  document.getElementById('date-to').value='';
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('on'));
+  S.page=1;S.expanded=null;render();
+}
+document.getElementById('date-from').addEventListener('change',function(){
+  S.dateFrom=this.value;
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('on'));
+  S.page=1;S.expanded=null;render();
+});
+document.getElementById('date-to').addEventListener('change',function(){
+  S.dateTo=this.value;
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.remove('on'));
+  S.page=1;S.expanded=null;render();
+});
+document.querySelectorAll('.tbtn').forEach(btn=>btn.addEventListener('click',function(){
+  S.tab=this.dataset.tab;
+  S.page=1;S.expanded=null;
+  // 일별 아닐 때 quick 버튼 숨김
+  document.getElementById('quick-btns').style.display=S.tab==='일별'?'flex':'none';
+  // 월별일 때 month-picker 표시
+  const mp=document.getElementById('month-picker');
+  if(S.tab==='월별'){
+    mp.classList.add('show');
+    initMonthPicker();
+  } else {
+    mp.classList.remove('show');
+  }
+  render();
+}));
+
+// ── 빠른 날짜 버튼 ────────────────────────────────────────────
+function setQuick(type){
+  const today=new Date();
+  const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const todayStr=fmt(today);
+  let from='', to=todayStr;
+  if(type==='today'){ from=todayStr; }
+  else if(type==='week'){
+    const d=new Date(today); d.setDate(d.getDate()-6);
+    from=fmt(d);
+  } else if(type==='month'){
+    const d=new Date(today); d.setDate(d.getDate()-29);
+    from=fmt(d);
+  }
+  S.dateFrom=from; S.dateTo=to;
+  document.getElementById('date-from').value=from;
+  document.getElementById('date-to').value=to;
+  document.querySelectorAll('.qbtn').forEach(b=>b.classList.toggle('on',b.getAttribute('onclick').includes(type)));
+  S.page=1;S.expanded=null;render();
+}
+
+// ── 월별 년/월 간편 선택 ──────────────────────────────────────
+function initMonthPicker(){
+  const dates=S.sales.map(r=>r.date).sort();
+  if(!dates.length) return;
+  const minY=parseInt(dates[0].slice(0,4));
+  const maxY=parseInt(dates[dates.length-1].slice(0,4));
+  const ySel=document.getElementById('mp-year');
+  const mSel=document.getElementById('mp-month');
+  // 년도 옵션
+  ySel.innerHTML='<option value="">전체</option>'+
+    Array.from({length:maxY-minY+1},(_,i)=>maxY-i).map(y=>`<option value="${y}">${y}년</option>`).join('');
+  // 월 옵션
+  mSel.innerHTML='<option value="">전체</option>'+
+    Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}월</option>`).join('');
+  // 현재 dateFrom/To 에서 년/월 복원
+  if(S.dateFrom){ ySel.value=S.dateFrom.slice(0,4); mSel.value=parseInt(S.dateFrom.slice(5,7)); }
+}
+
+function applyMonthPicker(){
+  const y=document.getElementById('mp-year').value;
+  const m=document.getElementById('mp-month').value;
+  if(!y){ clearDates(); return; }
+  const month=m?m.padStart(2,'0'):null;
+  if(month){
+    const lastDay=new Date(parseInt(y),parseInt(m),0).getDate();
+    S.dateFrom=`${y}-${month}-01`;
+    S.dateTo=`${y}-${month}-${String(lastDay).padStart(2,'0')}`;
+  } else {
+    S.dateFrom=`${y}-01-01`;
+    S.dateTo=`${y}-12-31`;
+  }
+  document.getElementById('date-from').value=S.dateFrom;
+  document.getElementById('date-to').value=S.dateTo;
+  S.page=1;S.expanded=null;render();
+}
 
 // ── 필터 / 렌더 ──────────────────────────────────────────────
 function getFiltered(){
@@ -1238,17 +1343,19 @@ function renderTable(){
     const pTotal=rows.reduce((a,b)=>a+b.total,0);
     const pSupply=rows.reduce((a,b)=>a+b.supply,0);
     const isOpen=S.expanded===period;
-    const tbody=useProds.map((prod,pi)=>{
+    // 해당 기간에 실제 판매된 제품만 필터링
+    const soldProds=useProds.filter(p=>(agg[p]||{}).qty>0);
+    const tbody=soldProds.map((prod,pi)=>{
       const v=agg[prod]||{qty:0,supply:0,total:0};
       const color=PAL[pi%PAL.length];
       const pct=pQty?Math.round((v.qty/pQty)*100):0;
-      const bar=v.qty>0?`<div style="display:flex;align-items:center;gap:4px;"><div style="height:5px;border-radius:3px;background:${color};width:${Math.max(pct,1)}%;max-width:100%;"></div><span style="font-size:9px;color:#aaa;">${pct}%</span></div>`:'-';
-      return `<tr style="opacity:${v.qty===0?.2:1};">
+      const bar=`<div style="display:flex;align-items:center;gap:4px;"><div style="height:5px;border-radius:3px;background:${color};width:${Math.max(pct,1)}%;max-width:100%;"></div><span style="font-size:9px;color:#aaa;">${pct}%</span></div>`;
+      return `<tr>
         <td style="color:#ccc;font-size:10px;">${pi+1}</td>
         <td>${prod}</td>
-        <td class="r" style="font-weight:${v.qty>0?700:400};color:${v.qty>0?color:'#ccc'};">${v.qty>0?fmt(v.qty):'-'}</td>
-        <td class="r" style="color:${v.supply>0?'#e07820':'#ccc'};">${v.supply>0?fmt(v.supply):'-'}</td>
-        <td class="r" style="color:${v.total>0?'#2eaa60':'#ccc'};">${v.total>0?fmt(v.total):'-'}</td>
+        <td class="r" style="font-weight:700;color:${color};">${fmt(v.qty)}</td>
+        <td class="r" style="color:#e07820;">${fmt(v.supply)}</td>
+        <td class="r" style="color:#2eaa60;">${fmt(v.total)}</td>
         <td>${bar}</td>
       </tr>`;
     }).join('');
