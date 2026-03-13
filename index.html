@@ -179,10 +179,22 @@ tfoot td{padding:7px 12px;font-weight:700;}
 
 /* 판매 편집 */
 .sales-edit-table{width:100%;border-collapse:collapse;font-size:12px;}
-.sales-edit-table th{padding:7px 10px;font-size:10px;color:#aaa;font-weight:500;border-bottom:1px solid #e4e7f0;text-align:left;white-space:nowrap;background:#F8F9FC;}
+.sales-edit-table th{padding:7px 10px;font-size:10px;color:#aaa;font-weight:500;border-bottom:1px solid #e4e7f0;text-align:left;white-space:nowrap;background:#F8F9FC;position:sticky;top:0;z-index:1;}
 .sales-edit-table td{padding:5px 6px;border-bottom:1px solid #F5F6FA;vertical-align:middle;}
 .sales-edit-table input{border:1px solid #e4e7f0;border-radius:5px;padding:4px 7px;font-size:12px;color:#333;outline:none;}
 .sales-edit-table input:focus{border-color:#4F8EF7;}
+.sales-edit-table tr.sf-checked{background:#F5F8FF;}
+
+/* 판매 편집 필터 바 */
+#sales-filter-bar{padding:12px 18px;border-bottom:1px solid #e4e7f0;display:flex;flex-direction:column;gap:10px;background:#fafbfd;flex-shrink:0;}
+.sf-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.sf-label{font-size:11px;color:#aaa;white-space:nowrap;font-weight:500;}
+.sf-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+#sales-filter-bar input[type=date]{border:1px solid #e4e7f0;border-radius:7px;padding:5px 8px;font-size:11px;color:#555;outline:none;background:#fff;cursor:pointer;}
+#sales-filter-bar input[type=date]:focus{border-color:#4F8EF7;}
+.sf-clear{font-size:10px;color:#aaa;background:#e4e7f0;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;}
+.sf-store-btn{padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e0e3ef;color:#aaa;background:transparent;cursor:pointer;transition:all .14s;white-space:nowrap;}
+.sf-store-btn.on{border-color:currentColor;}
 </style>
 </head>
 <body>
@@ -250,7 +262,7 @@ tfoot td{padding:7px 12px;font-weight:700;}
 
 <!-- ── 판매 편집 모달 ── -->
 <div class="modal-overlay" id="sales-modal">
-  <div class="modal">
+  <div class="modal" style="max-width:1100px;">
     <div class="modal-hd">
       <h2>✏️ 판매 데이터 편집</h2>
       <div class="modal-hd-right">
@@ -258,7 +270,33 @@ tfoot td{padding:7px 12px;font-weight:700;}
         <span class="modal-close" onclick="document.getElementById('sales-modal').classList.remove('show')">✕</span>
       </div>
     </div>
-    <div class="modal-body" id="sales-modal-body"></div>
+    <!-- 필터 바 -->
+    <div id="sales-filter-bar">
+      <div class="sf-row">
+        <div class="sf-group">
+          <span class="sf-label">날짜</span>
+          <input type="date" id="sf-date-from" onchange="sfFilter()"/>
+          <span style="color:#ccc;font-size:11px;">~</span>
+          <input type="date" id="sf-date-to" onchange="sfFilter()"/>
+          <button class="sf-clear" onclick="sfClearDate()">초기화</button>
+        </div>
+        <div class="sf-group">
+          <span class="sf-label">거래처</span>
+          <div id="sf-store-btns" style="display:flex;gap:4px;flex-wrap:wrap;"></div>
+        </div>
+      </div>
+      <div class="sf-row" style="justify-content:space-between;">
+        <div class="bulk-bar" style="margin:0;border:none;background:none;padding:0;gap:8px;">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#555;cursor:pointer;">
+            <input type="checkbox" id="sf-chk-all" style="width:15px;height:15px;accent-color:#4F8EF7;" onchange="sfToggleAll(this.checked)"/> 전체 선택
+          </label>
+          <span id="sf-sel-count" style="font-size:11px;color:#4F8EF7;font-weight:600;min-width:55px;">0개 선택</span>
+          <button class="bulk-del-btn" id="sf-bulk-del" onclick="sfBulkDelete()" disabled>🗑 선택 삭제</button>
+        </div>
+        <span id="sf-result-count" style="font-size:11px;color:#aaa;"></span>
+      </div>
+    </div>
+    <div class="modal-body" id="sales-modal-body" style="padding:0;"></div>
     <div class="modal-foot">
       <button class="btn btn-secondary" onclick="document.getElementById('sales-modal').classList.remove('show')">닫기</button>
       <button class="btn btn-primary" onclick="saveSalesModal()">💾 저장</button>
@@ -810,40 +848,151 @@ function saveProdModal(){
 // ═══════════════════════════════════════════════════════════
 // ── 판매 편집 모달 ──────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════
+const SF={dateFrom:'', dateTo:'', store:'전체', checked:new Set()};
+
 function openSalesModal(){
   if(!S.sales.length){toast('판매 데이터가 없습니다','err');return;}
-  editSales=JSON.parse(JSON.stringify(S.sales)).sort((a,b)=>b.date.localeCompare(a.date));
-  document.getElementById('sales-count').textContent=`${editSales.length}행`;
+  editSales=JSON.parse(JSON.stringify(S.sales)).sort((a,b)=>b.date.localeCompare(a.date)||a.store.localeCompare(b.store));
+  editSales.forEach((r,i)=>r._eid=i+1); // 고유 ID 부여
+  // 날짜 범위 초기값: 전체
+  SF.dateFrom=''; SF.dateTo=''; SF.store='전체'; SF.checked=new Set();
+  const dates=editSales.map(r=>r.date).sort();
+  if(dates.length){
+    document.getElementById('sf-date-from').min=dates[0];
+    document.getElementById('sf-date-from').max=dates[dates.length-1];
+    document.getElementById('sf-date-to').min=dates[0];
+    document.getElementById('sf-date-to').max=dates[dates.length-1];
+  }
+  document.getElementById('sf-date-from').value='';
+  document.getElementById('sf-date-to').value='';
+  sfRenderStoreBtns();
   renderSalesModal();
   document.getElementById('sales-modal').classList.add('show');
 }
 
+function sfGetFiltered(){
+  return editSales.filter(r=>
+    (!SF.dateFrom||r.date>=SF.dateFrom)&&
+    (!SF.dateTo||r.date<=SF.dateTo)&&
+    (SF.store==='전체'||r.store===SF.store)
+  );
+}
+
+function sfFilter(){
+  SF.dateFrom=document.getElementById('sf-date-from').value;
+  SF.dateTo=document.getElementById('sf-date-to').value;
+  SF.checked=new Set();
+  renderSalesModal();
+}
+
+function sfClearDate(){
+  SF.dateFrom=''; SF.dateTo='';
+  document.getElementById('sf-date-from').value='';
+  document.getElementById('sf-date-to').value='';
+  SF.checked=new Set();
+  renderSalesModal();
+}
+
+function sfSetStore(st){
+  SF.store=st; SF.checked=new Set();
+  sfRenderStoreBtns();
+  renderSalesModal();
+}
+
+function sfRenderStoreBtns(){
+  const stores=['전체',...[...new Set(editSales.map(r=>r.store))].filter(Boolean).sort()];
+  document.getElementById('sf-store-btns').innerHTML=stores.map((st,si)=>{
+    const color=si===0?'#999':PAL[si%PAL.length];
+    const on=SF.store===st;
+    return `<button class="sf-store-btn${on?' on':''}"
+      style="color:${on?color:'#aaa'};border-color:${on?color:'#e0e3ef'};background:${on?color+'15':'transparent'};"
+      onclick="sfSetStore('${st}')">${st}</button>`;
+  }).join('');
+}
+
+function sfToggleAll(checked){
+  const visible=sfGetFiltered();
+  if(checked) visible.forEach(r=>SF.checked.add(r._eid));
+  else SF.checked=new Set();
+  renderSalesModal();
+}
+
+function sfToggleRow(eid, checked){
+  if(checked) SF.checked.add(eid); else SF.checked.delete(eid);
+  sfUpdateBulkBar();
+  const tr=document.querySelector(`tr[data-eid="${eid}"]`);
+  if(tr) tr.classList.toggle('sf-checked', checked);
+}
+
+function sfUpdateBulkBar(){
+  const cnt=SF.checked.size;
+  document.getElementById('sf-sel-count').textContent=`${cnt}개 선택`;
+  document.getElementById('sf-bulk-del').disabled=cnt===0;
+  const visible=sfGetFiltered();
+  const chkAll=document.getElementById('sf-chk-all');
+  if(chkAll) chkAll.checked=visible.length>0&&visible.every(r=>SF.checked.has(r._eid));
+}
+
+function sfBulkDelete(){
+  const cnt=SF.checked.size;
+  if(!cnt) return;
+  if(!confirm(`선택한 ${cnt}행을 삭제하시겠습니까?`)) return;
+  editSales=editSales.filter(r=>!SF.checked.has(r._eid));
+  SF.checked=new Set();
+  renderSalesModal();
+  toast(`🗑 ${cnt}행 삭제됨 (저장 전)`,'warn');
+}
+
 function renderSalesModal(){
+  const visible=sfGetFiltered();
+  document.getElementById('sales-count').textContent=`전체 ${editSales.length}행`;
+  document.getElementById('sf-result-count').textContent=`표시 ${visible.length}행`;
+  sfUpdateBulkBar();
+
+  if(!visible.length){
+    document.getElementById('sales-modal-body').innerHTML=`<div class="no-data" style="padding:40px 0;">조건에 맞는 데이터가 없습니다</div>`;
+    return;
+  }
+
   document.getElementById('sales-modal-body').innerHTML=`
     <table class="sales-edit-table">
       <thead><tr>
+        <th style="width:32px;"><input type="checkbox" id="tbl-chk-all" style="width:14px;height:14px;accent-color:#4F8EF7;"
+          onchange="sfToggleAll(this.checked)" ${visible.length>0&&visible.every(r=>SF.checked.has(r._eid))?'checked':''}/></th>
         <th>날짜</th><th>거래처</th><th>제품명</th>
-        <th style="text-align:right;">수량</th><th style="text-align:right;">공급가액</th><th style="text-align:right;">합계</th>
-        <th></th>
+        <th style="text-align:right;">수량</th>
+        <th style="text-align:right;">공급가액</th>
+        <th style="text-align:right;">합계</th>
+        <th style="width:40px;"></th>
       </tr></thead>
-      <tbody>${editSales.map((r,i)=>`
-        <tr>
-          <td><input type="date" value="${r.date}" onchange="editSales[${i}].date=this.value" style="width:130px;"/></td>
-          <td><input value="${escH(r.store||'')}" onchange="editSales[${i}].store=this.value" style="width:80px;"/></td>
-          <td style="font-size:11px;color:#555;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escH(r.productName||'')}">${escH(r.productName||'')}</td>
-          <td><input type="number" value="${r.qty}" onchange="editSales[${i}].qty=Number(this.value)" style="width:70px;text-align:right;"/></td>
-          <td><input type="number" value="${r.supply}" onchange="editSales[${i}].supply=Number(this.value)" style="width:90px;text-align:right;"/></td>
-          <td><input type="number" value="${r.total}" onchange="editSales[${i}].total=Number(this.value)" style="width:90px;text-align:right;"/></td>
-          <td><button class="btn btn-danger btn-sm" onclick="deleteSalesRow(${i})">삭제</button></td>
-        </tr>`).join('')}
+      <tbody>${visible.map(r=>{
+        const gi=editSales.indexOf(r);
+        const chk=SF.checked.has(r._eid);
+        return `<tr data-eid="${r._eid}" class="${chk?'sf-checked':''}">
+          <td><input type="checkbox" style="width:14px;height:14px;accent-color:#4F8EF7;"
+            ${chk?'checked':''} onchange="sfToggleRow(${r._eid},this.checked)"/></td>
+          <td><input type="date" value="${r.date}" onchange="editSales[${gi}].date=this.value" style="width:128px;"/></td>
+          <td><input value="${escH(r.store||'')}" onchange="editSales[${gi}].store=this.value" style="width:75px;"/></td>
+          <td style="font-size:11px;color:#555;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+            title="${escH(r.productName||'')}">${escH(r.productName||'')}</td>
+          <td><input type="number" value="${r.qty}" onchange="editSales[${gi}].qty=Number(this.value)" style="width:65px;text-align:right;"/></td>
+          <td><input type="number" value="${r.supply}" onchange="editSales[${gi}].supply=Number(this.value)" style="width:88px;text-align:right;"/></td>
+          <td><input type="number" value="${r.total}" onchange="editSales[${gi}].total=Number(this.value)" style="width:88px;text-align:right;"/></td>
+          <td><button class="btn btn-danger btn-sm" onclick="sfDeleteRow(${r._eid})">삭제</button></td>
+        </tr>`;
+      }).join('')}
       </tbody>
     </table>`;
 }
 
-function deleteSalesRow(i){editSales.splice(i,1);document.getElementById('sales-count').textContent=`${editSales.length}행`;renderSalesModal();}
+function sfDeleteRow(eid){
+  editSales=editSales.filter(r=>r._eid!==eid);
+  SF.checked.delete(eid);
+  renderSalesModal();
+}
 
 function saveSalesModal(){
-  S.sales=editSales;
+  S.sales=editSales.map(({_eid,...rest})=>rest);
   saveToDB('sales',S.sales,()=>{render();toast('✅ 판매 데이터 저장 완료');});
   document.getElementById('sales-modal').classList.remove('show');
 }
