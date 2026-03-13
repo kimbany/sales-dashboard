@@ -87,6 +87,16 @@ input{font-family:inherit;}
 #ctrl-bar{display:flex;flex-direction:column;gap:8px;margin-bottom:14px;}
 .ctrl-row1{display:flex;align-items:center;}
 .ctrl-row2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.ctrl-row-search{display:flex;align-items:center;margin:2px 0;}
+#search-box{display:flex;align-items:center;gap:6px;background:#fff;border:1.5px solid #e4e7f0;border-radius:8px;padding:5px 12px;width:100%;max-width:480px;transition:border-color .15s;}
+#search-box:focus-within{border-color:#4F8EF7;}
+.search-icon{font-size:13px;opacity:.5;flex-shrink:0;}
+#prod-search-main{border:none;outline:none;font-size:12px;color:#333;background:transparent;flex:1;min-width:0;}
+#prod-search-main::placeholder{color:#bbb;}
+.search-clear{border:none;background:none;cursor:pointer;color:#bbb;font-size:13px;padding:0;line-height:1;flex-shrink:0;}
+.search-clear:hover{color:#888;}
+.search-tag{display:inline-flex;align-items:center;gap:4px;background:#EEF4FF;color:#4F8EF7;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:600;margin-left:6px;}
+
 .store-filters{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
 .filter-lbl{font-size:10px;color:#aaa;margin-right:2px;white-space:nowrap;}
 .fbtn{padding:4px 11px;border-radius:20px;font-size:11px;border:1px solid #e0e3ef;color:#aaa;background:transparent;transition:all .14s;white-space:nowrap;}
@@ -332,6 +342,13 @@ tfoot td{padding:7px 12px;font-weight:700;}
         <div class="ctrl-row1">
           <div class="store-filters" id="store-filter-btns"><span class="filter-lbl">거래처</span></div>
         </div>
+        <div class="ctrl-row-search">
+          <div id="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="prod-search-main" placeholder="상품명 또는 코드로 검색 (띄어쓰기로 키워드 구분)" oninput="onSearchInput()"/>
+            <button class="search-clear" id="search-clear-btn" onclick="clearSearch()" style="display:none;">✕</button>
+          </div>
+        </div>
         <div class="ctrl-row2">
           <div class="quick-btns" id="quick-btns">
             <button class="qbtn" onclick="setQuick('today')">오늘</button>
@@ -373,7 +390,7 @@ const db=firebase.database();
 //   alias label 예: '코드2', '쿠팡코드', '이마트코드', '메가마트코드', '코드3', ...
 // sales: [{ date, store, code, productName, supplier, qty, supply, vat, total }, ...]
 
-const S={products:[],sales:[],tab:'일별',selStore:'전체',dateFrom:'',dateTo:'',expanded:null,page:1,PG:20,uid:null};
+const S={products:[],sales:[],tab:'일별',selStore:'전체',dateFrom:'',dateTo:'',searchQ:'',expanded:null,page:1,PG:20,uid:null};
 let editProds=[];
 let editSales=[];
 let selectedProds=new Set();
@@ -1253,10 +1270,43 @@ function applyMonthPicker(){
 
 // ── 필터 / 렌더 ──────────────────────────────────────────────
 function getFiltered(){
-  return S.sales.filter(r=>
-    (S.selStore==='전체'||r.store===S.selStore)&&
-    (!S.dateFrom||r.date>=S.dateFrom)&&(!S.dateTo||r.date<=S.dateTo)
-  );
+  const keywords = S.searchQ ? S.searchQ.trim().toLowerCase().split(/\s+/).filter(Boolean) : [];
+  // 검색용 코드맵: productName → 해당 제품의 모든 코드(메인+서브) 문자열
+  let prodCodeStr = null;
+  if(keywords.length){
+    prodCodeStr = {};
+    S.products.forEach(p=>{
+      const codes = [p.code1, ...(p.aliases||[]).map(a=>a.code)].filter(Boolean).join(' ').toLowerCase();
+      prodCodeStr[p.name] = codes;
+    });
+  }
+  return S.sales.filter(r=>{
+    if(S.selStore!=='전체' && r.store!==S.selStore) return false;
+    if(S.dateFrom && r.date<S.dateFrom) return false;
+    if(S.dateTo && r.date>S.dateTo) return false;
+    if(keywords.length){
+      // 상품명(띄어쓰기 키워드) + 거래처 품목코드 + 제품 등록 코드들 모두 검색
+      const nameLower = (r.productName||'').toLowerCase();
+      const codeLower = (r.code||'').toLowerCase();
+      const regCodes = prodCodeStr[r.productName] || '';
+      const haystack = nameLower + ' ' + codeLower + ' ' + regCodes;
+      if(!keywords.every(kw=>haystack.includes(kw))) return false;
+    }
+    return true;
+  });
+}
+
+function onSearchInput(){
+  S.searchQ = document.getElementById('prod-search-main').value;
+  document.getElementById('search-clear-btn').style.display = S.searchQ ? 'block' : 'none';
+  S.page=1; S.expanded=null; render();
+}
+
+function clearSearch(){
+  S.searchQ='';
+  document.getElementById('prod-search-main').value='';
+  document.getElementById('search-clear-btn').style.display='none';
+  S.page=1; S.expanded=null; render();
 }
 function render(){renderSummary();renderStoreCards();renderFilterBtns();renderTable();}
 
