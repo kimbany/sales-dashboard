@@ -167,6 +167,16 @@ tfoot td{padding:7px 12px;font-weight:700;}
 .prod-search:focus{border-color:#4F8EF7;}
 .dup-warn{background:#fffbe6;border:1px solid #F7D45455;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:11px;color:#b07800;}
 
+/* 일괄 선택 툴바 */
+.bulk-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#F5F6FA;border:1px solid #e4e7f0;border-radius:8px;margin-bottom:12px;flex-wrap:wrap;}
+.bulk-bar label{display:flex;align-items:center;gap:6px;font-size:12px;color:#555;cursor:pointer;user-select:none;}
+.bulk-bar input[type=checkbox]{width:15px;height:15px;accent-color:#4F8EF7;cursor:pointer;}
+.bulk-count{font-size:11px;color:#4F8EF7;font-weight:600;min-width:60px;}
+.bulk-del-btn{padding:5px 14px;border-radius:7px;font-size:12px;background:#fff0f0;color:#e03030;border:1px solid #F7545433;cursor:pointer;}
+.bulk-del-btn:disabled{opacity:.35;cursor:default;}
+.prod-row-check{width:15px;height:15px;accent-color:#4F8EF7;cursor:pointer;flex-shrink:0;margin-top:2px;}
+.prod-row.selected{background:#F5F8FF !important;border-color:#4F8EF755;}
+
 /* 판매 편집 */
 .sales-edit-table{width:100%;border-collapse:collapse;font-size:12px;}
 .sales-edit-table th{padding:7px 10px;font-size:10px;color:#aaa;font-weight:500;border-bottom:1px solid #e4e7f0;text-align:left;white-space:nowrap;background:#F8F9FC;}
@@ -223,6 +233,11 @@ tfoot td{padding:7px 12px;font-weight:700;}
     </div>
     <div class="modal-body">
       <input class="prod-search" id="prod-search" placeholder="🔍 제품명 또는 코드로 검색..." oninput="renderProdModal()"/>
+      <div class="bulk-bar">
+        <label><input type="checkbox" id="chk-all" onchange="toggleAllCheck(this.checked)"/> 전체 선택</label>
+        <span class="bulk-count" id="bulk-count">0개 선택</span>
+        <button class="bulk-del-btn" id="bulk-del-btn" onclick="bulkDelete()" disabled>🗑 선택 삭제</button>
+      </div>
       <div id="dup-warn-area"></div>
       <div id="prod-list"></div>
     </div>
@@ -308,6 +323,7 @@ const db=firebase.database();
 const S={products:[],sales:[],tab:'일별',selStore:'전체',dateFrom:'',dateTo:'',expanded:null,page:1,PG:20,uid:null};
 let editProds=[]; // 제품 모달 편집용 deep copy
 let editSales=[]; // 판매 모달 편집용 deep copy
+let selectedProds=new Set(); // 일괄 선택된 인덱스
 
 const PAL=['#4F8EF7','#54D07A','#F7A54F','#F75496','#A054F7','#54C8F7','#F7D454','#F75454','#54F7C8','#C854F7'];
 const fmt=n=>(n!=null&&!isNaN(n)&&n!=='')?Number(n).toLocaleString():'-';
@@ -399,7 +415,7 @@ function buildCodeMap(){
   return map;
 }
 
-// ── 제품 파일 파싱 (새 구조로) ───────────────────────────────
+// ── 제품 파일 파싱 (코드 병합 방식) ────────────────────────────
 document.getElementById('product-file').addEventListener('change',function(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
@@ -421,52 +437,84 @@ document.getElementById('product-file').addEventListener('change',function(e){
       const c1I   = ci(['코드1','코드 1']);
       const nameI = ci(['품명','제품명']);
 
-      // 나머지 코드 컬럼 자동 감지 (코드1 제외한 코드 컬럼)
-      const aliasCols = hdrs.map((h,i)=>{
+      // 코드1 제외한 코드 컬럼 자동 감지
+      const aliasCols=hdrs.map((h,i)=>{
         if(i===supI||i===c1I||i===nameI) return null;
         if(h.includes('코드')||h.toLowerCase().includes('code')) return {i, label:h};
         return null;
       }).filter(Boolean);
 
-      const products=[];
+      // 파일에서 파싱한 제품 목록
+      const parsed=[];
       for(let i=hi+1;i<rows.length;i++){
         const r=rows[i];
         const name=String(r[nameI]||'').trim();
         const code1=String(r[c1I]||'').trim();
         if(!name&&!code1) continue;
-
         const aliases=[];
         aliasCols.forEach(col=>{
           const v=String(r[col.i]||'').trim();
           if(v) aliases.push({label:col.label, code:v});
         });
-
-        products.push({
-          code1: code1||name,
-          name,
-          supplier: String(r[supI]||'').trim(),
-          aliases
-        });
+        parsed.push({code1:code1||name, name, supplier:String(r[supI]||'').trim(), aliases});
       }
+
+      // ── 기존 제품과 병합 ──────────────────────────────────────
+      // 코드1 기준으로 매칭 → 있으면 코드 병합, 없으면 신규 추가
+      const existing=JSON.parse(JSON.stringify(S.products)); // 기존 제품 복사
+      let addedCount=0, updatedCount=0;
+
+      parsed.forEach(p=>{
+        const idx=existing.findIndex(e=>e.code1===p.code1);
+        if(idx>=0){
+          // 기존 제품 - 코드 병합 (새 코드만 추가, 기존 코드는 유지)
+          const ex=existing[idx];
+          // 상품명/공급사는 파일 기준으로 업데이트
+          ex.name=p.name;
+          ex.supplier=p.supplier;
+          // alias 병합: 같은 label이 없으면 추가, 있으면 코드값 업데이트
+          p.aliases.forEach(newA=>{
+            const ai=(ex.aliases||[]).findIndex(a=>a.label===newA.label);
+            if(ai>=0){ ex.aliases[ai].code=newA.code; } // 기존 label → 코드값 업데이트
+            else{
+              if(!ex.aliases) ex.aliases=[];
+              ex.aliases.push(newA); // 새 코드 추가
+            }
+          });
+          updatedCount++;
+        } else {
+          existing.push(p);
+          addedCount++;
+        }
+      });
 
       // 중복 코드1 감지
       const c1Map={};
-      products.forEach(p=>{
-        if(!c1Map[p.code1]) c1Map[p.code1]=[];
-        c1Map[p.code1].push(p.name);
-      });
-      const dups=Object.entries(c1Map).filter(([,names])=>names.length>1);
+      existing.forEach(p=>{if(!c1Map[p.code1])c1Map[p.code1]=0;c1Map[p.code1]++;});
+      const dups=Object.entries(c1Map).filter(([,n])=>n>1);
       if(dups.length){
-        const msg=dups.slice(0,5).map(([c,ns])=>`코드1 [${c}] → ${ns.join(', ')}`).join('\n');
-        if(!confirm(`⚠️ 코드1 중복 ${dups.length}건!\n\n${msg}\n\n계속하시겠습니까?`)){this.value='';return;}
+        const msg=dups.slice(0,5).map(([c])=>`코드1 [${c}]`).join(', ');
+        if(!confirm(`⚠️ 코드1 중복 ${dups.length}건!\n${msg}\n\n계속하시겠습니까?`)){this.value='';return;}
       }
 
-      S.products=products; S.sales=[]; S.selStore='전체'; S.page=1;
+      S.products=existing;
       enableSalesUpload();
-      saveToDB('products',products);
-      ref('sales').remove();
+      saveToDB('products',existing);
+
+      // 판매 데이터 재매핑 (코드가 바뀌었을 수 있으므로)
+      if(S.sales.length){
+        const codeMap=buildCodeMap();
+        S.sales=S.sales.map(s=>{
+          const mapped=codeMap.get(s.code)||codeMap.get(s.productName)||s.productName;
+          const prod=S.products.find(p=>p.name===mapped);
+          return {...s,productName:mapped,supplier:prod?prod.supplier:s.supplier};
+        });
+        saveToDB('sales',S.sales);
+      }
+
       showDashboard(); render();
-      toast(`✅ 제품 ${products.length}개 저장 완료`+(dups.length?` (중복 ${dups.length}건)`:''), dups.length?'warn':'ok');
+      const msg=`✅ 신규 ${addedCount}개 추가 · 기존 ${updatedCount}개 업데이트`+(dups.length?` (중복 ${dups.length}건)`:'');
+      toast(msg, dups.length?'warn':'ok');
     }catch(e){toast('❌ 제품 파일 오류: '+e.message,'err');}
   };
   reader.readAsArrayBuffer(file); this.value='';
@@ -558,6 +606,7 @@ document.getElementById('sales-file').addEventListener('change',function(e){
 function openProdModal(){
   if(!S.products.length){toast('제품 리스트가 없습니다','err');return;}
   editProds=JSON.parse(JSON.stringify(S.products));
+  selectedProds=new Set();
   document.getElementById('prod-search').value='';
   renderProdModal();
   document.getElementById('prod-modal').classList.add('show');
@@ -574,44 +623,90 @@ function renderProdModal(){
     : editProds;
 
   document.getElementById('prod-count').textContent=`${editProds.length}개 제품`;
+  updateBulkBar();
 
   // 중복 코드1 감지
   const c1Map={};
   editProds.forEach(p=>{if(p.code1){if(!c1Map[p.code1])c1Map[p.code1]=0;c1Map[p.code1]++;}});
   const dupC1=Object.entries(c1Map).filter(([,n])=>n>1).map(([c])=>c);
   const warnEl=document.getElementById('dup-warn-area');
-  if(dupC1.length){
-    warnEl.innerHTML=`<div class="dup-warn">⚠️ 코드1 중복 ${dupC1.length}건: ${dupC1.join(', ')}</div>`;
-  } else warnEl.innerHTML='';
+  warnEl.innerHTML=dupC1.length
+    ? `<div class="dup-warn">⚠️ 코드1 중복 ${dupC1.length}건: ${dupC1.join(', ')}</div>`
+    : '';
 
-  document.getElementById('prod-list').innerHTML=list.map((p,_)=>{
-    const gi=editProds.indexOf(p); // 실제 인덱스
+  document.getElementById('prod-list').innerHTML=list.map((p)=>{
+    const gi=editProds.indexOf(p);
     const aliases=p.aliases||[];
+    const isChecked=selectedProds.has(gi);
     const aliasHtml=aliases.map((a,ai)=>`
       <div class="code-chip">
         <span class="code-label">${escH(a.label)}</span>
-        <input value="${escH(a.code)}" placeholder="코드" oninput="editProds[${gi}].aliases[${ai}].code=this.value" title="${escH(a.label)}"/>
-        <span class="chip-del" onclick="removeAlias(${gi},${ai})" title="삭제">✕</span>
+        <input value="${escH(a.code)}" placeholder="코드" oninput="editProds[${gi}].aliases[${ai}].code=this.value"/>
+        <span class="chip-del" onclick="removeAlias(${gi},${ai})">✕</span>
       </div>`).join('');
 
-    return `<div class="prod-row" id="prod-row-${gi}">
+    return `<div class="prod-row${isChecked?' selected':''}" id="prod-row-${gi}">
       <div class="prod-row-top">
-        <input class="prod-name-input" value="${escH(p.name)}" placeholder="제품명"
-          oninput="editProds[${gi}].name=this.value" title="제품명"/>
+        <input type="checkbox" class="prod-row-check" ${isChecked?'checked':''} onchange="toggleCheck(${gi},this.checked)"/>
+        <input class="prod-name-input" value="${escH(p.name)}" placeholder="제품명" oninput="editProds[${gi}].name=this.value"/>
         <span class="prod-supplier">${escH(p.supplier||'')}</span>
-        <button class="btn btn-danger btn-sm" onclick="deleteProd(${gi})" title="제품 삭제">🗑 삭제</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProd(${gi})">🗑 삭제</button>
       </div>
       <div class="codes-area">
         <div class="code-chip" style="background:#EEF4FF;border-color:#4F8EF740;">
           <span class="code-label" style="color:#4F8EF7;">코드1</span>
-          <input class="code1" value="${escH(p.code1||'')}" placeholder="코드1(기본키)"
-            oninput="editProds[${gi}].code1=this.value" title="코드1 (기본 식별 코드)"/>
+          <input class="code1" value="${escH(p.code1||'')}" placeholder="코드1(기본키)" oninput="editProds[${gi}].code1=this.value"/>
         </div>
         ${aliasHtml}
         <button class="add-code-btn" onclick="addAlias(${gi})">＋ 코드 추가</button>
       </div>
     </div>`;
   }).join('');
+}
+
+function updateBulkBar(){
+  const cnt=selectedProds.size;
+  document.getElementById('bulk-count').textContent=`${cnt}개 선택`;
+  document.getElementById('bulk-del-btn').disabled=cnt===0;
+  const allVis=document.querySelectorAll('.prod-row-check');
+  const chkAll=document.getElementById('chk-all');
+  if(chkAll) chkAll.checked=allVis.length>0&&[...allVis].every(c=>c.checked);
+}
+
+function toggleCheck(gi, checked){
+  if(checked) selectedProds.add(gi); else selectedProds.delete(gi);
+  const row=document.getElementById(`prod-row-${gi}`);
+  if(row) row.classList.toggle('selected', checked);
+  updateBulkBar();
+}
+
+function toggleAllCheck(checked){
+  // 현재 검색 결과 기준으로 전체 선택/해제
+  const q=document.getElementById('prod-search').value.trim().toLowerCase();
+  const list=q
+    ? editProds.filter(p=>
+        p.name.toLowerCase().includes(q)||
+        String(p.code1||'').toLowerCase().includes(q)||
+        (p.aliases||[]).some(a=>String(a.code||'').toLowerCase().includes(q))
+      )
+    : editProds;
+  list.forEach(p=>{
+    const gi=editProds.indexOf(p);
+    if(checked) selectedProds.add(gi); else selectedProds.delete(gi);
+  });
+  renderProdModal();
+}
+
+function bulkDelete(){
+  const cnt=selectedProds.size;
+  if(!cnt) return;
+  if(!confirm(`선택한 제품 ${cnt}개를 삭제하시겠습니까?`)) return;
+  // 인덱스 내림차순으로 삭제 (앞에서 지우면 인덱스 틀어짐)
+  const idxs=[...selectedProds].sort((a,b)=>b-a);
+  idxs.forEach(i=>editProds.splice(i,1));
+  selectedProds=new Set();
+  renderProdModal();
+  toast(`🗑 ${cnt}개 삭제됨 (저장 전)`,'warn');
 }
 
 function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
