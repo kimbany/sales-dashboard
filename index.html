@@ -301,7 +301,7 @@ tfoot td{padding:7px 12px;font-weight:700;}
   <div id="empty">
     <div class="big">📁</div>
     <h2>제품 리스트 파일을 먼저 업로드하세요</h2>
-    <p style="font-size:12px;margin-top:4px;">공급사 / 코드1 / 코드2 / 쿠팡코드 / 품명 컬럼이 포함된 .xlsx 파일</p>
+    <p style="font-size:12px;margin-top:4px;">공급사 / 메인코드 / 코드2 / 코드3... / 품명 컬럼이 포함된 .xlsx 파일</p>
     <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:14px;">
       <span style="font-size:10px;color:#aaa;">판매 데이터 →</span>
       <span class="ctag">날짜</span><span class="ctag">거래처</span><span class="ctag">품목명코드</span>
@@ -362,6 +362,9 @@ function toDS(raw){
   if(!raw&&raw!==0)return null;
   if(typeof raw==='number'){const d=new Date(Math.round((raw-25569)*86400000));return d.toISOString().split('T')[0];}
   const s=String(raw).replace(' 00:00:00','').trim();
+  // 2024/01/01 또는 2024-01-01 형식 직접 처리
+  const m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if(m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
   const d=new Date(s);return isNaN(d)?null:d.toISOString().split('T')[0];
 }
 function weekLabel(ds){const d=new Date(ds),j=new Date(d.getFullYear(),0,1),w=Math.ceil(((d-j)/86400000+j.getDay()+1)/7);return `${d.getFullYear()}-W${String(w).padStart(2,'0')}`;}
@@ -401,10 +404,12 @@ function loadFromDB(){
       S.products=Object.values(v).map(p=>{
         let aliases=[];
         if(p.aliasMap&&typeof p.aliasMap==='object'){
-          aliases=Object.entries(p.aliasMap).map(([label,code])=>({label,code:code||''}));
+          // aliasMap의 라벨 무시하고 값이 있는 것만 코드2,3,4... 순으로 재정렬
+          const vals=Object.values(p.aliasMap).map(v=>String(v||'').trim());
+          aliases=vals.map((code,i)=>({label:`코드${i+2}`, code}));
         } else if(p.aliases){
           aliases=Array.isArray(p.aliases)?p.aliases:Object.values(p.aliases);
-          aliases=aliases.filter(a=>a&&a.label).map(a=>({label:a.label,code:a.code||''}));
+          aliases=aliases.filter(a=>a&&a.label).map((a,i)=>({label:`코드${i+2}`, code:a.code||''}));
         }
         const {aliasMap,...rest}=p;
         return {...rest,aliases};
@@ -423,7 +428,8 @@ function saveToDB(key,arr,cb){
   if(key==='products'){
     cleaned=arr.map(p=>{
       const aliasMap={};
-      (p.aliases||[]).forEach(a=>{ if(a&&a.label) aliasMap[a.label]=a.code||''; });
+      // 저장 시 코드2,3,4... 라벨 순서대로 aliasMap으로 변환
+      (p.aliases||[]).forEach((a,i)=>{ aliasMap[`코드${i+2}`]=a.code||''; });
       // _pid, aliases 제거 후 aliasMap만 저장
       const {_pid, aliases, ...rest}=p;
       return {...rest, aliasMap};
@@ -495,8 +501,8 @@ document.getElementById('product-file').addEventListener('change',function(e){
         const code1=String(r[c1I]||'').trim();
         if(!name&&!code1) continue;
         // 값 없어도 label 슬롯은 항상 생성
-        const aliases=aliasCols.map(col=>({
-          label: col.label,
+        const aliases=aliasCols.map((col,i)=>({
+          label:`코드${i+2}`,
           code:  String(r[col.i]||'').trim()
         }));
         parsed.push({code1:code1||name, name, supplier:String(r[supI]||'').trim(), aliases});
@@ -530,8 +536,8 @@ document.getElementById('product-file').addEventListener('change',function(e){
       existing.forEach(p=>{if(!c1Map[p.code1])c1Map[p.code1]=0;c1Map[p.code1]++;});
       const dups=Object.entries(c1Map).filter(([,n])=>n>1);
       if(dups.length){
-        const msg=dups.slice(0,5).map(([c])=>`코드1 [${c}]`).join(', ');
-        if(!confirm(`⚠️ 코드1 중복 ${dups.length}건!\n${msg}\n\n계속하시겠습니까?`)){this.value='';return;}
+        const msg=dups.slice(0,5).map(([c])=>`메인코드 [${c}]`).join(', ');
+        if(!confirm(`⚠️ 메인코드 중복 ${dups.length}건!\n${msg}\n\n계속하시겠습니까?`)){this.value='';return;}
       }
 
       S.products=existing;
@@ -564,15 +570,19 @@ document.getElementById('sales-file').addEventListener('change',function(e){
       const wb=XLSX.read(ev.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-      let hi=rows.findIndex(r=>r.some(c=>String(c).includes('날짜')||String(c).toLowerCase()==='date'));
+      let hi=rows.findIndex(r=>r.some(c=>String(c).includes('날짜')||String(c).toLowerCase()==='date'||String(c).includes('일별')||String(c).includes('일자')));
       if(hi<0) hi=0;
       const hdrs=rows[hi].map(h=>String(h).trim());
       const fi=kws=>hdrs.findIndex(h=>kws.some(k=>h.includes(k)));
-      const dateI=fi(['날짜','date','일자']);
+      const dateI=fi(['날짜','date','일자','일별']);
       const stCI =fi(['거래처코드']);
       const stNI =stCI>=0?stCI+1:fi(['거래처']);
       const codeI=fi(['품목명[규격]코드','품목코드','품목명코드']);
-      const prodI=fi(['품목명[규격]','품목명','제품명']);
+      // prodI는 코드 컬럼 제외하고 품명 컬럼만 (codeI와 다른 컬럼이어야 함)
+      const prodI=(()=>{
+        const kws=['품목명[규격]','품목명','제품명'];
+        return hdrs.findIndex((h,i)=>i!==codeI&&kws.some(k=>h.includes(k)));
+      })();
       const qtyI =fi(['수량','qty']);
       const supI =fi(['공급가액','공급가']);
       const vatI =fi(['부가세','vat']);
@@ -671,7 +681,7 @@ function renderProdModal(){
   editProds.forEach(p=>{if(p.code1){if(!c1Map[p.code1])c1Map[p.code1]=0;c1Map[p.code1]++;}});
   const dupC1=Object.entries(c1Map).filter(([,n])=>n>1).map(([c])=>c);
   document.getElementById('dup-warn-area').innerHTML=dupC1.length
-    ? `<div class="dup-warn">⚠️ 코드1 중복 ${dupC1.length}건: ${dupC1.join(', ')}</div>` : '';
+    ? `<div class="dup-warn">⚠️ 메인코드 중복 ${dupC1.length}건: ${dupC1.join(', ')}</div>` : '';
 
   document.getElementById('prod-list').innerHTML=list.map(p=>{
     const pid=p._pid;
@@ -698,9 +708,9 @@ function renderProdModal(){
       </div>
       <div class="codes-area">
         <div class="code-chip" style="background:#EEF4FF;border-color:#4F8EF740;">
-          <span class="code-label" style="color:#4F8EF7;">코드1</span>
-          <input class="code1" value="${escH(p.code1||'')}" placeholder="코드1(기본키)"
-            oninput="getProd(${pid}).code1=this.value"/>
+          <span class="code-label" style="color:#4F8EF7;">메인코드</span>
+          <input class="code1" value="${escH(p.code1||'')}" placeholder="메인코드(기본키)" readonly
+            style="cursor:default;color:#4F8EF7;font-weight:700;background:#f0f5ff;"/>
         </div>
         ${aliasHtml}
         <button class="add-code-btn" onclick="addAlias(${pid})">＋ 코드 추가</button>
@@ -748,13 +758,12 @@ function addAlias(pid){
   const p=getProd(pid);
   if(!p) return;
   if(!p.aliases) p.aliases=[];
-  const existingLabels=p.aliases.map(a=>a.label);
-  const defaults=['코드2','쿠팡코드','이마트코드','메가마트코드','코드3','코드4','코드5'];
-  const label=defaults.find(d=>!existingLabels.includes(d))||`코드${existingLabels.length+2}`;
+  // 다음 번호 자동 배정 (코드2부터)
+  const nextNum = p.aliases.length + 2;
+  const label = `코드${nextNum}`;
   const ai=p.aliases.length;
   p.aliases.push({label, code:''});
 
-  // 해당 제품 row에만 칩 직접 삽입 (전체 재렌더 없이)
   const row=document.getElementById(`prow-${pid}`);
   if(row){
     const addBtn=row.querySelector('.add-code-btn');
@@ -775,11 +784,11 @@ function removeAlias(pid,ai){
   const p=getProd(pid);
   if(!p) return;
   p.aliases.splice(ai,1);
-  // 해당 제품 row만 다시 그리기
+  // 삭제 후 라벨 재번호 부여
+  p.aliases.forEach((a,i)=>{ a.label=`코드${i+2}`; });
   const row=document.getElementById(`prow-${pid}`);
   if(row){
     const aliases=p.aliases||[];
-    const isChecked=selectedProds.has(pid);
     const aliasHtml=aliases.map((a,i)=>`
       <div class="code-chip" data-ai="${i}">
         <span class="code-label">${escH(a.label)}</span>
@@ -789,9 +798,9 @@ function removeAlias(pid,ai){
       </div>`).join('');
     row.querySelector('.codes-area').innerHTML=`
       <div class="code-chip" style="background:#EEF4FF;border-color:#4F8EF740;">
-        <span class="code-label" style="color:#4F8EF7;">코드1</span>
-        <input class="code1" value="${escH(p.code1||'')}" placeholder="코드1(기본키)"
-          oninput="getProd(${pid}).code1=this.value"/>
+        <span class="code-label" style="color:#4F8EF7;">메인코드</span>
+        <input class="code1" value="${escH(p.code1||'')}" placeholder="메인코드(기본키)" readonly
+          style="cursor:default;color:#4F8EF7;font-weight:700;background:#f0f5ff;"/>
       </div>
       ${aliasHtml}
       <button class="add-code-btn" onclick="addAlias(${pid})">＋ 코드 추가</button>`;
@@ -808,7 +817,7 @@ function deleteProd(pid){
 
 function saveProdModal(){
   const empty=editProds.filter(p=>!String(p.code1||'').trim());
-  if(empty.length){toast(`⚠️ 코드1이 비어있는 제품 ${empty.length}개가 있습니다`,'warn');return;}
+  if(empty.length){toast(`⚠️ 메인코드가 비어있는 제품 ${empty.length}개가 있습니다`,'warn');return;}
   S.products=editProds.map(({_pid,...rest})=>rest);
   const codeMap=buildCodeMap();
   S.sales=S.sales.map(s=>{
@@ -835,7 +844,7 @@ function downloadProdExcel(){
     if(a.label && !allLabels.includes(a.label)) allLabels.push(a.label);
   }));
 
-  const header = ['코드1','제품명','공급사', ...allLabels];
+  const header = ['메인코드','제품명','공급사', ...allLabels];
   const rows = targets.map(p => {
     const row = [p.code1||'', p.name||'', p.supplier||''];
     allLabels.forEach(lbl => {
@@ -869,12 +878,12 @@ function uploadProdExcel(input){
       if(rows.length < 2){ toast('데이터가 없습니다','err'); return; }
 
       const hdr = rows[0].map(h => String(h||'').trim());
-      const c1Idx = hdr.findIndex(h => h==='코드1');
+      const c1Idx = hdr.findIndex(h => h==='메인코드'||h==='코드1');
       const nameIdx = hdr.findIndex(h => h==='제품명');
       const supplierIdx = hdr.findIndex(h => h==='공급사');
 
       if(c1Idx < 0 || nameIdx < 0){
-        showUploadError(['❌ 헤더에 "코드1", "제품명" 컬럼이 필요합니다.']);
+        showUploadError(['❌ 헤더에 "메인코드"(또는 "코드1"), "제품명" 컬럼이 필요합니다.']);
         return;
       }
 
@@ -889,11 +898,11 @@ function uploadProdExcel(input){
         const code1 = String(row[c1Idx]||'').trim();
         if(!code1) return;
         if(!editProds.find(p => p.code1 === code1)){
-          errors.push(`행 ${ri+2}: 코드1 "${code1}" 은 등록되지 않은 제품입니다 (코드1 추가·변경 불가)`);
+          errors.push(`행 ${ri+2}: 메인코드 "${code1}" 은 등록되지 않은 제품입니다 (메인코드 추가·변경 불가)`);
           return;
         }
         if(incomingC1s.includes(code1)){
-          errors.push(`행 ${ri+2}: 코드1 "${code1}" 이 파일 내에서 중복됩니다`);
+          errors.push(`행 ${ri+2}: 메인코드 "${code1}" 이 파일 내에서 중복됩니다`);
         } else {
           incomingC1s.push(code1);
         }
