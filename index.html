@@ -367,9 +367,9 @@ tfoot td{padding:7px 12px;font-weight:700;}
             <button class="date-clear" onclick="clearDates()">전체</button>
           </div>
           <div id="month-picker">
-            <select id="mp-year" onchange="applyMonthPicker()"></select>
+            <select id="mp-year"></select>
             <span style="color:#ccc;font-size:11px;">년</span>
-            <select id="mp-month" onchange="applyMonthPicker()"></select>
+            <select id="mp-month"></select>
             <span style="color:#ccc;font-size:11px;">월</span>
           </div>
         </div>
@@ -1240,14 +1240,16 @@ function initMonthPicker(){
   const maxY=parseInt(dates[dates.length-1].slice(0,4));
   const ySel=document.getElementById('mp-year');
   const mSel=document.getElementById('mp-month');
-  // 년도 옵션
+  // onchange 잠깐 비활성화 후 옵션 세팅 (자동 트리거 방지)
+  ySel.onchange=null; mSel.onchange=null;
   ySel.innerHTML='<option value="">전체</option>'+
     Array.from({length:maxY-minY+1},(_,i)=>maxY-i).map(y=>`<option value="${y}">${y}년</option>`).join('');
-  // 월 옵션
   mSel.innerHTML='<option value="">전체</option>'+
     Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}월</option>`).join('');
   // 현재 dateFrom/To 에서 년/월 복원
   if(S.dateFrom){ ySel.value=S.dateFrom.slice(0,4); mSel.value=parseInt(S.dateFrom.slice(5,7)); }
+  // onchange 다시 연결
+  ySel.onchange=applyMonthPicker; mSel.onchange=applyMonthPicker;
 }
 
 function applyMonthPicker(){
