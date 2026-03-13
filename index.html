@@ -422,7 +422,6 @@ function showDashboard(){
 }
 
 // ── 코드 → 제품 매핑 빌더 ────────────────────────────────────
-// 모든 코드(code1 + aliases)를 key로 productName 반환하는 Map
 function buildCodeMap(){
   const map=new Map();
   S.products.forEach(p=>{
@@ -432,7 +431,8 @@ function buildCodeMap(){
   return map;
 }
 
-// ── 제품 파일 파싱 (코드 병합 방식) ────────────────────────────
+// ── 제품 파일 파싱 ───────────────────────────────────────────
+// 헤더 컬럼을 고정 슬롯으로 사용 (값 없어도 슬롯 유지)
 document.getElementById('product-file').addEventListener('change',function(e){
   const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
@@ -442,61 +442,60 @@ document.getElementById('product-file').addEventListener('change',function(e){
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
 
-      // 헤더 찾기
+      // 헤더 행 찾기
       let hi=rows.findIndex(r=>r.some(c=>String(c).includes('코드1')||String(c).includes('코드 1')));
       if(hi<0) hi=rows.findIndex(r=>r.some(c=>String(c).includes('공급사')));
-      if(hi<0) hi=1;
+      if(hi<0) hi=0;
 
       const hdrs=rows[hi].map(h=>String(h).trim());
-      const ci=(kws)=>hdrs.findIndex(h=>kws.some(k=>h.replace(/\s/g,'').toLowerCase().includes(k.replace(/\s/g,'').toLowerCase())));
+      const ci=kws=>hdrs.findIndex(h=>kws.some(k=>h.replace(/\s/g,'').toLowerCase()===k.replace(/\s/g,'').toLowerCase()));
+      const ciInc=kws=>hdrs.findIndex(h=>kws.some(k=>h.replace(/\s/g,'').toLowerCase().includes(k.replace(/\s/g,'').toLowerCase())));
 
-      const supI  = ci(['공급사']);
-      const c1I   = ci(['코드1','코드 1']);
-      const nameI = ci(['품명','제품명']);
+      const supI  = ciInc(['공급사']);
+      const c1I   = ciInc(['코드1','코드 1']);
+      const nameI = ciInc(['품명','제품명']);
 
-      // 코드1 제외한 코드 컬럼 자동 감지
+      // 코드1·공급사·품명 제외한 나머지 코드 컬럼 → 고정 슬롯 (값 없어도 포함)
       const aliasCols=hdrs.map((h,i)=>{
-        if(i===supI||i===c1I||i===nameI) return null;
-        if(h.includes('코드')||h.toLowerCase().includes('code')) return {i, label:h};
+        if(i===supI||i===c1I||i===nameI||!h) return null;
+        // 코드 관련 컬럼 감지: 코드, code, 이마트, 쿠팡, 메가 등
+        const norm=h.replace(/\s/g,'').toLowerCase();
+        if(norm.includes('코드')||norm.includes('code')||
+           norm.includes('이마트')||norm.includes('쿠팡')||
+           norm.includes('메가')||norm.includes('마트')) return {i, label:h};
         return null;
       }).filter(Boolean);
 
-      // 파일에서 파싱한 제품 목록
+      // 파일 파싱 → aliases는 값 있든 없든 슬롯 항상 생성
       const parsed=[];
       for(let i=hi+1;i<rows.length;i++){
         const r=rows[i];
         const name=String(r[nameI]||'').trim();
         const code1=String(r[c1I]||'').trim();
         if(!name&&!code1) continue;
-        const aliases=[];
-        aliasCols.forEach(col=>{
-          const v=String(r[col.i]||'').trim();
-          if(v) aliases.push({label:col.label, code:v});
-        });
+        // 값 없어도 label 슬롯은 항상 생성
+        const aliases=aliasCols.map(col=>({
+          label: col.label,
+          code:  String(r[col.i]||'').trim()
+        }));
         parsed.push({code1:code1||name, name, supplier:String(r[supI]||'').trim(), aliases});
       }
 
-      // ── 기존 제품과 병합 ──────────────────────────────────────
-      // 코드1 기준으로 매칭 → 있으면 코드 병합, 없으면 신규 추가
-      const existing=JSON.parse(JSON.stringify(S.products)); // 기존 제품 복사
+      // 기존 제품과 병합 (코드1 기준)
+      const existing=JSON.parse(JSON.stringify(S.products));
       let addedCount=0, updatedCount=0;
 
       parsed.forEach(p=>{
         const idx=existing.findIndex(e=>e.code1===p.code1);
         if(idx>=0){
-          // 기존 제품 - 코드 병합 (새 코드만 추가, 기존 코드는 유지)
           const ex=existing[idx];
-          // 상품명/공급사는 파일 기준으로 업데이트
           ex.name=p.name;
           ex.supplier=p.supplier;
-          // alias 병합: 같은 label이 없으면 추가, 있으면 코드값 업데이트
+          // 파일 슬롯 기준으로 업데이트 (같은 label → 값 덮어쓰기, 없는 label → 추가)
           p.aliases.forEach(newA=>{
             const ai=(ex.aliases||[]).findIndex(a=>a.label===newA.label);
-            if(ai>=0){ ex.aliases[ai].code=newA.code; } // 기존 label → 코드값 업데이트
-            else{
-              if(!ex.aliases) ex.aliases=[];
-              ex.aliases.push(newA); // 새 코드 추가
-            }
+            if(ai>=0){ ex.aliases[ai].code=newA.code; }
+            else{ if(!ex.aliases)ex.aliases=[]; ex.aliases.push(newA); }
           });
           updatedCount++;
         } else {
@@ -518,7 +517,6 @@ document.getElementById('product-file').addEventListener('change',function(e){
       enableSalesUpload();
       saveToDB('products',existing);
 
-      // 판매 데이터 재매핑 (코드가 바뀌었을 수 있으므로)
       if(S.sales.length){
         const codeMap=buildCodeMap();
         S.sales=S.sales.map(s=>{
@@ -530,9 +528,8 @@ document.getElementById('product-file').addEventListener('change',function(e){
       }
 
       showDashboard(); render();
-      const msg=`✅ 신규 ${addedCount}개 추가 · 기존 ${updatedCount}개 업데이트`+(dups.length?` (중복 ${dups.length}건)`:'');
-      toast(msg, dups.length?'warn':'ok');
-    }catch(e){toast('❌ 제품 파일 오류: '+e.message,'err');}
+      toast(`✅ 신규 ${addedCount}개 추가 · 기존 ${updatedCount}개 업데이트`+(dups.length?` (중복 ${dups.length}건)`:''), dups.length?'warn':'ok');
+    }catch(ex){toast('❌ 제품 파일 오류: '+ex.message,'err');}
   };
   reader.readAsArrayBuffer(file); this.value='';
 });
@@ -662,7 +659,7 @@ function renderProdModal(){
     const aliasHtml=aliases.map((a,ai)=>`
       <div class="code-chip" data-ai="${ai}">
         <span class="code-label">${escH(a.label)}</span>
-        <input value="${escH(a.code)}" placeholder="코드"
+        <input value="${escH(a.code)}" placeholder="없음"
           oninput="getProd(${pid}).aliases[${ai}].code=this.value"/>
         <span class="chip-del" onclick="removeAlias(${pid},${ai})">✕</span>
       </div>`).join('');
@@ -763,7 +760,7 @@ function removeAlias(pid,ai){
     const aliasHtml=aliases.map((a,i)=>`
       <div class="code-chip" data-ai="${i}">
         <span class="code-label">${escH(a.label)}</span>
-        <input value="${escH(a.code)}" placeholder="코드"
+        <input value="${escH(a.code)}" placeholder="없음"
           oninput="getProd(${pid}).aliases[${i}].code=this.value"/>
         <span class="chip-del" onclick="removeAlias(${pid},${i})">✕</span>
       </div>`).join('');
