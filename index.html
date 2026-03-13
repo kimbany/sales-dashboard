@@ -384,15 +384,17 @@ function loadFromDB(){
     const v=snap.val();
     if(v){
       S.products=Object.values(v).map(p=>{
-        // Firebase는 배열을 {0:..., 1:...} 객체로 저장 → 배열로 복원
+        // aliasMap({label:code}) → aliases 배열로 복원
         let aliases=[];
-        if(p.aliases){
-          aliases=Array.isArray(p.aliases)
-            ? p.aliases
-            : Object.values(p.aliases);
-          aliases=aliases.filter(a=>a&&a.label); // null 제거
+        if(p.aliasMap && typeof p.aliasMap==='object'){
+          aliases=Object.entries(p.aliasMap).map(([label,code])=>({label, code:code||''}));
+        } else if(p.aliases){
+          // 구버전 호환
+          aliases=Array.isArray(p.aliases)?p.aliases:Object.values(p.aliases);
+          aliases=aliases.filter(a=>a&&a.label).map(a=>({label:a.label,code:a.code||''}));
         }
-        return {...p, aliases};
+        const {aliasMap,...rest}=p;
+        return {...rest, aliases};
       });
       enableSalesUpload();
     }
@@ -404,10 +406,16 @@ function loadFromDB(){
 }
 function saveToDB(key,arr,cb){
   syncBadge('syncing');
-  // products 저장 시 aliases를 순수 배열로 정리 (빈코드 포함 저장 - 편집 중 유지 위해)
-  const cleaned = key==='products'
-    ? arr.map(p=>({...p, aliases:Array.isArray(p.aliases)?p.aliases:Object.values(p.aliases||{})}))
-    : arr;
+  let cleaned=arr;
+  if(key==='products'){
+    cleaned=arr.map(p=>{
+      // aliases 배열을 {label:code} 객체 맵으로 변환 → Firebase가 빈값도 안전 보존
+      const aliasMap={};
+      (p.aliases||[]).forEach(a=>{ if(a&&a.label) aliasMap[a.label]=a.code||''; });
+      const {_pid,...rest}=p; // _pid 제거
+      return {...rest, aliasMap, aliases:undefined};
+    });
+  }
   const obj={};cleaned.forEach((x,i)=>obj[i]=x);
   ref(key).set(obj).then(()=>{syncBadge('saved');if(cb)cb();}).catch(e=>{syncBadge('');toast('저장 오류: '+e.message,'err');});
 }
@@ -786,7 +794,6 @@ function deleteProd(pid){
 function saveProdModal(){
   const empty=editProds.filter(p=>!String(p.code1||'').trim());
   if(empty.length){toast(`⚠️ 코드1이 비어있는 제품 ${empty.length}개가 있습니다`,'warn');return;}
-  // _pid 제거 후 저장
   S.products=editProds.map(({_pid,...rest})=>rest);
   const codeMap=buildCodeMap();
   S.sales=S.sales.map(s=>{
