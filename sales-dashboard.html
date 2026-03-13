@@ -4,7 +4,27 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>매출 대시보드</title>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<!-- SheetJS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyBXqMGlCZanp7_EYCPdOodweWwHBQlsoPE",
+  authDomain:        "sales-dashboard-fa79f.firebaseapp.com",
+  databaseURL:       "https://sales-dashboard-fa79f-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId:         "sales-dashboard-fa79f",
+  storageBucket:     "sales-dashboard-fa79f.firebasestorage.app",
+  messagingSenderId: "1094159344938",
+  appId:             "1:1094159344938:web:bcd2e7dc6f415138692a53"
+};
+</script>
+
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -16,21 +36,50 @@ input[type=date]{font-family:inherit;}
 ::-webkit-scrollbar-track{background:#0B0D13;}
 ::-webkit-scrollbar-thumb{background:#1e2130;border-radius:3px;}
 
+/* 로딩 */
+#loading{position:fixed;inset:0;background:#0B0D13;display:flex;align-items:center;justify-content:center;z-index:999;flex-direction:column;gap:14px;}
+.spinner{width:36px;height:36px;border:3px solid #1a1d28;border-top-color:#4F8EF7;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* 로그인 화면 */
+#login-screen{display:none;flex-direction:column;align-items:center;justify-content:center;height:100vh;}
+.login-card{background:#111420;border:1px solid #1a1d28;border-radius:16px;padding:52px 60px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:18px;}
+.login-logo{width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,#4F8EF7,#A054F7);display:flex;align-items:center;justify-content:center;font-size:28px;}
+.login-card h1{font-size:20px;font-weight:700;}
+.login-card p{font-size:12px;color:#484b5a;}
+.google-btn{display:flex;align-items:center;gap:10px;padding:12px 28px;border-radius:10px;background:#fff;color:#222;font-size:13px;font-weight:600;cursor:pointer;transition:opacity .2s;margin-top:4px;border:none;}
+.google-btn:hover{opacity:.86;}
+.google-btn img{width:18px;height:18px;}
+
 /* 헤더 */
-#header{background:#0F1118;border-bottom:1px solid #1a1d28;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:54px;position:sticky;top:0;z-index:200;}
+#header{background:#0F1118;border-bottom:1px solid #1a1d28;padding:0 24px;display:none;align-items:center;justify-content:space-between;height:54px;position:sticky;top:0;z-index:200;}
 #logo{display:flex;align-items:center;gap:10px;}
 .logo-icon{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#4F8EF7,#A054F7);display:flex;align-items:center;justify-content:center;font-size:14px;}
 .logo-title{font-weight:700;font-size:15px;}
 .logo-badge{font-size:10px;color:#4F8EF7;background:#4F8EF712;padding:2px 7px;border-radius:4px;letter-spacing:.5px;}
-#header-btns{display:flex;gap:8px;}
+#header-right{display:flex;align-items:center;gap:10px;}
 .upload-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:8px;font-size:12px;cursor:pointer;transition:all .2s;user-select:none;white-space:nowrap;}
 .upload-btn input{display:none;}
 .upload-btn.blue{background:#4F8EF712;border:1px solid #4F8EF744;color:#4F8EF7;}
 .upload-btn.green{background:#54D07A12;border:1px solid #54D07A44;color:#54D07A;}
 .upload-btn.green.off{background:#13151c;border-color:#252830;color:#3a3d48;opacity:.5;cursor:not-allowed;}
+#user-info{display:flex;align-items:center;gap:8px;font-size:12px;color:#484b5a;}
+#user-photo{width:26px;height:26px;border-radius:50%;border:1px solid #1a1d28;display:none;}
+.logout-btn{padding:5px 11px;border-radius:7px;font-size:11px;border:1px solid #252830;color:#555;background:transparent;cursor:pointer;}
+.logout-btn:hover{border-color:#555;color:#aaa;}
+#sync-badge{font-size:10px;padding:3px 9px;border-radius:6px;display:none;}
+#sync-badge.syncing{background:#4F8EF718;color:#4F8EF7;border:1px solid #4F8EF733;}
+#sync-badge.saved{background:#54D07A18;color:#54D07A;border:1px solid #54D07A33;}
 
 /* 본문 */
 #content{padding:18px 24px;display:none;}
+
+/* 빈 상태 */
+#empty{display:none;flex-direction:column;align-items:center;justify-content:center;height:60vh;gap:10px;color:#484b5a;text-align:center;}
+#empty .big{font-size:48px;}
+#empty h2{font-size:16px;font-weight:600;color:#555;}
+.col-tags{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:14px;}
+.ctag{font-size:10px;color:#4F8EF7;background:#4F8EF710;padding:2px 8px;border-radius:4px;}
 
 /* 요약 카드 */
 .sum-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;}
@@ -42,33 +91,27 @@ input[type=date]{font-family:inherit;}
 /* 거래처 카드 */
 #store-cards{display:flex;gap:10px;margin-bottom:16px;overflow-x:auto;padding-bottom:3px;}
 .store-card{background:#111420;border:1px solid #1a1d28;border-radius:11px;padding:12px 15px;min-width:148px;cursor:pointer;transition:all .18s;flex-shrink:0;}
-.store-card .sc-name{font-size:10px;font-weight:600;margin-bottom:4px;letter-spacing:.3px;}
-.store-card .sc-qty{font-size:18px;font-weight:700;margin-bottom:7px;}
-.store-card .sc-rev{font-size:10px;color:#484b5a;margin-bottom:6px;}
-.store-card .sc-sub{font-size:9px;color:#2e3142;margin-top:3px;}
+.sc-name{font-size:10px;font-weight:600;margin-bottom:4px;letter-spacing:.3px;}
+.sc-qty{font-size:18px;font-weight:700;margin-bottom:7px;}
+.sc-rev{font-size:10px;color:#484b5a;margin-bottom:6px;}
+.sc-sub{font-size:9px;color:#2e3142;margin-top:3px;}
 
 /* 통계 패널 */
 #stats-panel{background:#111420;border:1px solid #1a1d28;border-radius:13px;padding:16px 20px;}
-
-/* 컨트롤 바 */
 #ctrl-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap;}
 .store-filters{display:flex;gap:5px;align-items:center;flex-wrap:wrap;}
 .filter-lbl{font-size:10px;color:#484b5a;margin-right:2px;white-space:nowrap;}
 .fbtn{padding:4px 11px;border-radius:20px;font-size:11px;border:1px solid #252830;color:#555;background:transparent;transition:all .14s;white-space:nowrap;}
 .fbtn.on{border-color:currentColor;}
-
-/* 탭 + 날짜 */
 #tab-date-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .tab-grp{display:flex;background:#0B0D13;border-radius:7px;padding:3px;gap:2px;}
 .tbtn{padding:5px 13px;border-radius:5px;font-size:12px;color:#555;transition:all .18s;}
 .tbtn.on{background:#4F8EF7;color:#fff;}
-
-/* 날짜 범위 */
 #date-range{display:flex;align-items:center;gap:6px;background:#0B0D13;border:1px solid #1a1d28;border-radius:8px;padding:4px 10px;}
 #date-range input[type=date]{background:transparent;border:none;color:#aab0c8;font-size:11px;outline:none;cursor:pointer;width:108px;}
 #date-range input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.4);cursor:pointer;}
 #date-range .sep{color:#2e3142;font-size:11px;}
-.date-clear{font-size:10px;color:#484b5a;background:#1a1d28;border:none;border-radius:4px;padding:2px 7px;cursor:pointer;transition:all .14s;}
+.date-clear{font-size:10px;color:#484b5a;background:#1a1d28;border:none;border-radius:4px;padding:2px 7px;cursor:pointer;}
 .date-clear:hover{color:#aab0c8;}
 
 /* 기간 블록 */
@@ -79,7 +122,6 @@ input[type=date]{font-family:inherit;}
 .plabel{font-size:11px;font-weight:700;color:#4F8EF7;background:#4F8EF710;padding:3px 9px;border-radius:5px;letter-spacing:.3px;}
 .pmeta{font-size:11px;color:#555;margin-left:10px;}
 .pmeta b{color:#DDE0EC;}
-.pmeta .green{color:#54D07A;}
 .parr{color:#2e3142;font-size:12px;transition:transform .18s;display:inline-block;}
 .parr.open{transform:rotate(180deg);}
 
@@ -96,7 +138,7 @@ tfoot td{padding:7px 12px;font-weight:700;}
 
 /* 페이지네이션 */
 #pagination{display:flex;justify-content:center;gap:5px;margin-top:12px;}
-.pgbtn{width:30px;height:30px;border-radius:6px;font-size:12px;border:1px solid #1a1d28;color:#555;background:transparent;transition:all .14s;}
+.pgbtn{width:30px;height:30px;border-radius:6px;font-size:12px;border:1px solid #1a1d28;color:#555;background:transparent;}
 .pgbtn.on{border-color:#4F8EF7;background:#4F8EF720;color:#4F8EF7;}
 .pgbtn:disabled{color:#252830;cursor:default;}
 
@@ -105,26 +147,39 @@ tfoot td{padding:7px 12px;font-weight:700;}
 .tok{background:#0f1f14;border:1px solid #54D07A44;color:#90EFB8;}
 .terr{background:#2a1515;border:1px solid #F7545444;color:#F7A0A0;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-
-/* 빈 상태 */
-#empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:76vh;gap:10px;color:#484b5a;text-align:center;}
-#empty .big{font-size:48px;}
-#empty h2{font-size:16px;font-weight:600;color:#555;}
-.col-tags{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:14px;}
-.ctag{font-size:10px;color:#4F8EF7;background:#4F8EF710;padding:2px 8px;border-radius:4px;}
-
 .no-data{text-align:center;padding:48px 0;color:#484b5a;}
 </style>
 </head>
 <body>
 
+<!-- 로딩 -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div style="font-size:12px;color:#484b5a;">연결 중...</div>
+</div>
+
+<!-- 로그인 -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">📊</div>
+    <h1>매출 대시보드</h1>
+    <p>Google 계정으로 로그인하여 시작하세요</p>
+    <button class="google-btn" onclick="googleLogin()">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"/>
+      Google로 로그인
+    </button>
+  </div>
+</div>
+
+<!-- 헤더 -->
 <div id="header">
   <div id="logo">
     <div class="logo-icon">📊</div>
     <span class="logo-title">매출 대시보드</span>
     <span class="logo-badge">SALES ANALYTICS</span>
   </div>
-  <div id="header-btns">
+  <div id="header-right">
+    <span id="sync-badge"></span>
     <label class="upload-btn blue">
       📋 제품 리스트 업로드
       <input type="file" id="product-file" accept=".xlsx,.xls,.csv"/>
@@ -133,291 +188,286 @@ tfoot td{padding:7px 12px;font-weight:700;}
       📂 판매 데이터 업로드
       <input type="file" id="sales-file" accept=".xlsx,.xls,.csv" disabled/>
     </label>
+    <div id="user-info">
+      <img id="user-photo"/>
+      <span id="user-name"></span>
+      <button class="logout-btn" onclick="logout()">로그아웃</button>
+    </div>
   </div>
 </div>
 
 <div id="toast"></div>
 
-<!-- 빈 상태 -->
-<div id="empty">
-  <div class="big">📁</div>
-  <h2>제품 리스트 파일을 먼저 업로드하세요</h2>
-  <p style="font-size:12px;">공급사 / 코드 / 품명이 포함된 .xlsx 파일</p>
-  <div class="col-tags" style="margin-top:18px;">
-    <span style="font-size:10px;color:#555;margin-right:3px;">판매 데이터 컬럼 →</span>
-    <span class="ctag">날짜</span><span class="ctag">거래처그룹1</span><span class="ctag">거래처</span>
-    <span class="ctag">품목명코드</span><span class="ctag">품목명[규격]</span>
-    <span class="ctag">수량</span><span class="ctag">공급가액</span><span class="ctag">부가세</span><span class="ctag">합계</span>
-  </div>
-</div>
-
-<!-- 메인 -->
+<!-- 본문 -->
 <div id="content">
-  <div class="sum-grid">
-    <div class="sum-card" style="border:1px solid #4F8EF718;">
-      <div><div class="lbl">총 판매 수량</div><div class="val" id="s-qty" style="color:#4F8EF7;">-</div></div>
-      <div class="ico">📦</div>
-    </div>
-    <div class="sum-card" style="border:1px solid #54D07A18;">
-      <div><div class="lbl">총 합계금액</div><div class="val" id="s-total" style="color:#54D07A;">-</div></div>
-      <div class="ico">💰</div>
-    </div>
-    <div class="sum-card" style="border:1px solid #F7A54F18;">
-      <div><div class="lbl">공급가액 합계</div><div class="val" id="s-supply" style="color:#F7A54F;">-</div></div>
-      <div class="ico">🏷️</div>
-    </div>
-    <div class="sum-card" style="border:1px solid #A054F718;">
-      <div><div class="lbl">거래처 수</div><div class="val" id="s-stores" style="color:#A054F7;">-</div></div>
-      <div class="ico">🏪</div>
+  <div id="empty">
+    <div class="big">📁</div>
+    <h2>제품 리스트 파일을 먼저 업로드하세요</h2>
+    <p style="font-size:12px;">공급사 / 코드 / 품명이 포함된 .xlsx 파일</p>
+    <div class="col-tags" style="margin-top:18px;">
+      <span style="font-size:10px;color:#555;margin-right:3px;">판매 데이터 컬럼 →</span>
+      <span class="ctag">날짜</span><span class="ctag">거래처</span>
+      <span class="ctag">품목명코드</span><span class="ctag">품목명[규격]</span>
+      <span class="ctag">수량</span><span class="ctag">공급가액</span><span class="ctag">부가세</span><span class="ctag">합계</span>
     </div>
   </div>
 
-  <div id="store-cards"></div>
-
-  <div id="stats-panel">
-    <!-- 컨트롤 바 -->
-    <div id="ctrl-bar">
-      <!-- 거래처 필터 -->
-      <div class="store-filters" id="store-filter-btns">
-        <span class="filter-lbl">거래처</span>
-      </div>
-      <!-- 탭 + 날짜 -->
-      <div id="tab-date-row">
-        <div class="tab-grp">
-          <button class="tbtn on" data-tab="일별">일별</button>
-          <button class="tbtn" data-tab="주별">주별</button>
-          <button class="tbtn" data-tab="월별">월별</button>
-        </div>
-        <div id="date-range">
-          <input type="date" id="date-from" title="시작일"/>
-          <span class="sep">~</span>
-          <input type="date" id="date-to" title="종료일"/>
-          <button class="date-clear" onclick="clearDates()">전체</button>
-        </div>
-      </div>
+  <div id="dashboard" style="display:none;">
+    <div class="sum-grid">
+      <div class="sum-card" style="border:1px solid #4F8EF718;"><div><div class="lbl">총 판매 수량</div><div class="val" id="s-qty" style="color:#4F8EF7;">-</div></div><div class="ico">📦</div></div>
+      <div class="sum-card" style="border:1px solid #54D07A18;"><div><div class="lbl">총 합계금액</div><div class="val" id="s-total" style="color:#54D07A;">-</div></div><div class="ico">💰</div></div>
+      <div class="sum-card" style="border:1px solid #F7A54F18;"><div><div class="lbl">공급가액 합계</div><div class="val" id="s-supply" style="color:#F7A54F;">-</div></div><div class="ico">🏷️</div></div>
+      <div class="sum-card" style="border:1px solid #A054F718;"><div><div class="lbl">거래처 수</div><div class="val" id="s-stores" style="color:#A054F7;">-</div></div><div class="ico">🏪</div></div>
     </div>
-
-    <div id="table-area"></div>
-    <div id="pagination"></div>
+    <div id="store-cards"></div>
+    <div id="stats-panel">
+      <div id="ctrl-bar">
+        <div class="store-filters" id="store-filter-btns"><span class="filter-lbl">거래처</span></div>
+        <div id="tab-date-row">
+          <div class="tab-grp">
+            <button class="tbtn on" data-tab="일별">일별</button>
+            <button class="tbtn" data-tab="주별">주별</button>
+            <button class="tbtn" data-tab="월별">월별</button>
+          </div>
+          <div id="date-range">
+            <input type="date" id="date-from"/>
+            <span class="sep">~</span>
+            <input type="date" id="date-to"/>
+            <button class="date-clear" onclick="clearDates()">전체</button>
+          </div>
+        </div>
+      </div>
+      <div id="table-area"></div>
+      <div id="pagination"></div>
+    </div>
   </div>
 </div>
 
 <script>
-// ── 상태 ──────────────────────────────────────────────────────
+// ── Firebase 초기화 ───────────────────────────────────────────
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db   = firebase.database();
+
+// ── 상태 ─────────────────────────────────────────────────────
 const S = {
-  products: [],  // {code, name, supplier}
-  sales: [],     // {date, store, code, productName, supplier, qty, supply, vat, total}
-  tab: '일별',
-  selStore: '전체',
-  dateFrom: '',
-  dateTo: '',
-  expanded: null,
-  page: 1,
-  PG: 20,
+  products:[], sales:[],
+  tab:'일별', selStore:'전체',
+  dateFrom:'', dateTo:'',
+  expanded:null, page:1, PG:20, uid:null
 };
+const PAL=['#4F8EF7','#54D07A','#F7A54F','#F75496','#A054F7','#54C8F7','#F7D454','#F75454','#54F7C8','#C854F7'];
+const fmt = n => (n!=null&&!isNaN(n)&&n!=='') ? Number(n).toLocaleString() : '-';
 
-const PAL = ['#4F8EF7','#54D07A','#F7A54F','#F75496','#A054F7','#54C8F7','#F7D454','#F75454','#54F7C8','#C854F7'];
-const fmt = n => (n != null && !isNaN(n) && n !== '') ? Number(n).toLocaleString() : '-';
-
-function toDS(raw) {
-  if (!raw && raw !== 0) return null;
-  if (typeof raw === 'number') {
-    const d = new Date(Math.round((raw - 25569) * 86400000));
-    return d.toISOString().split('T')[0];
-  }
-  const s = String(raw).replace(' 00:00:00','').trim();
-  const d = new Date(s);
-  return isNaN(d) ? null : d.toISOString().split('T')[0];
+function toDS(raw){
+  if(!raw&&raw!==0)return null;
+  if(typeof raw==='number'){const d=new Date(Math.round((raw-25569)*86400000));return d.toISOString().split('T')[0];}
+  const s=String(raw).replace(' 00:00:00','').trim();
+  const d=new Date(s);return isNaN(d)?null:d.toISOString().split('T')[0];
 }
-function weekLabel(ds) {
-  const d = new Date(ds);
-  const j = new Date(d.getFullYear(), 0, 1);
-  const w = Math.ceil(((d - j) / 86400000 + j.getDay() + 1) / 7);
-  return `${d.getFullYear()}-W${String(w).padStart(2,'0')}`;
+function weekLabel(ds){const d=new Date(ds),j=new Date(d.getFullYear(),0,1),w=Math.ceil(((d-j)/86400000+j.getDay()+1)/7);return `${d.getFullYear()}-W${String(w).padStart(2,'0')}`;}
+function monthLabel(ds){const d=new Date(ds);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;}
+function pKey(r){return S.tab==='일별'?r.date:S.tab==='주별'?weekLabel(r.date):monthLabel(r.date);}
+function pDisp(p){
+  if(S.tab==='일별')return p.replace(/-/g,'.');
+  if(S.tab==='주별'){const[y,w]=p.split('-W');return `${y}년 ${parseInt(w)}주차`;}
+  const[y,m]=p.split('-');return `${y}년 ${parseInt(m)}월`;
 }
-function monthLabel(ds) {
-  const d = new Date(ds); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-}
-function pKey(row) {
-  if (S.tab==='일별') return row.date;
-  if (S.tab==='주별') return weekLabel(row.date);
-  return monthLabel(row.date);
-}
-function pDisp(p) {
-  if (S.tab==='일별') return p.replace(/-/g,'.');
-  if (S.tab==='주별') { const [y,w]=p.split('-W'); return `${y}년 ${parseInt(w)}주차`; }
-  const [y,m]=p.split('-'); return `${y}년 ${parseInt(m)}월`;
-}
-function toast(msg, type='ok') {
+function toast(msg,type='ok'){
   const el=document.getElementById('toast');
-  el.textContent=msg; el.className=type==='ok'?'tok':'terr';
-  el.style.display='block'; setTimeout(()=>el.style.display='none',3200);
+  el.textContent=msg;el.className=type==='ok'?'tok':'terr';
+  el.style.display='block';setTimeout(()=>el.style.display='none',3200);
+}
+function syncBadge(state){
+  const el=document.getElementById('sync-badge');
+  if(state==='syncing'){el.textContent='⏳ 저장 중...';el.className='syncing';el.style.display='inline-block';}
+  else if(state==='saved'){el.textContent='✅ 저장됨';el.className='saved';el.style.display='inline-block';setTimeout(()=>el.style.display='none',2500);}
+  else el.style.display='none';
 }
 
-// ── 날짜 범위 초기화 ──────────────────────────────────────────
-function clearDates() {
-  S.dateFrom=''; S.dateTo='';
-  document.getElementById('date-from').value='';
-  document.getElementById('date-to').value='';
-  S.page=1; S.expanded=null; render();
+// ── 인증 ─────────────────────────────────────────────────────
+function googleLogin(){
+  const p=new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(p).catch(e=>toast('로그인 실패: '+e.message,'err'));
 }
-document.getElementById('date-from').addEventListener('change', function(){
-  S.dateFrom=this.value; S.page=1; S.expanded=null; render();
+function logout(){ auth.signOut(); }
+
+auth.onAuthStateChanged(user=>{
+  document.getElementById('loading').style.display='none';
+  if(user){
+    S.uid=user.uid;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('header').style.display='flex';
+    document.getElementById('content').style.display='block';
+    document.getElementById('user-name').textContent=user.displayName||user.email;
+    const ph=document.getElementById('user-photo');
+    if(user.photoURL){ph.src=user.photoURL;ph.style.display='block';}
+    loadFromDB();
+  } else {
+    S.uid=null;S.products=[];S.sales=[];
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('header').style.display='none';
+    document.getElementById('content').style.display='none';
+  }
 });
-document.getElementById('date-to').addEventListener('change', function(){
-  S.dateTo=this.value; S.page=1; S.expanded=null; render();
-});
 
-// ── 필터된 데이터 ──────────────────────────────────────────────
-function getFiltered() {
-  return S.sales.filter(r => {
-    if (S.selStore!=='전체' && r.store!==S.selStore) return false;
-    if (S.dateFrom && r.date < S.dateFrom) return false;
-    if (S.dateTo   && r.date > S.dateTo)   return false;
-    return true;
-  });
+// ── DB 연동 ──────────────────────────────────────────────────
+function ref(path){ return db.ref(`users/${S.uid}/${path}`); }
+
+function loadFromDB(){
+  ref('products').once('value').then(snap=>{
+    const v=snap.val();
+    if(v){ S.products=Object.values(v); enableSalesUpload(); }
+    return ref('sales').once('value');
+  }).then(snap=>{
+    const v=snap.val();
+    if(v) S.sales=Object.values(v);
+    showDashboard(); render();
+  }).catch(e=>toast('로드 오류: '+e.message,'err'));
 }
 
-// ── 제품 리스트 업로드 ─────────────────────────────────────────
-document.getElementById('product-file').addEventListener('change', function(e) {
-  const file=e.target.files[0]; if(!file) return;
+function saveToDB(key, arr){
+  syncBadge('syncing');
+  const obj={};arr.forEach((x,i)=>obj[i]=x);
+  ref(key).set(obj).then(()=>syncBadge('saved')).catch(e=>{syncBadge('');toast('저장 오류: '+e.message,'err');});
+}
+
+function enableSalesUpload(){
+  document.getElementById('sales-file').disabled=false;
+  document.getElementById('sales-lbl').classList.remove('off');
+}
+function showDashboard(){
+  const has=S.products.length>0;
+  document.getElementById('empty').style.display=has?'none':'flex';
+  document.getElementById('dashboard').style.display=has?'block':'none';
+}
+
+// ── 제품 리스트 업로드 ───────────────────────────────────────
+document.getElementById('product-file').addEventListener('change',function(e){
+  const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=function(ev){
-    try {
+    try{
       const wb=XLSX.read(ev.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
       let hi=rows.findIndex(r=>r.some(c=>String(c).includes('공급사')));
-      if(hi<0) hi=1;
+      if(hi<0)hi=1;
       const hdrs=rows[hi].map(h=>String(h).trim());
       const si=hdrs.findIndex(h=>h.includes('공급사'));
       const ni=hdrs.findIndex(h=>h.includes('품명'));
       const cis=hdrs.map((h,i)=>h.includes('코드')?i:-1).filter(i=>i>=0&&i!==si);
-
       const list=[];
       const add=(code,name,sup)=>{
-        code=String(code||'').trim(); name=String(name||'').trim();
-        if(!code||!name) return;
-        if(!list.find(p=>p.code===code&&p.name===name))
-          list.push({code,name,supplier:String(sup||'').trim()});
+        code=String(code||'').trim();name=String(name||'').trim();
+        if(!code||!name)return;
+        if(!list.find(p=>p.code===code&&p.name===name))list.push({code,name,supplier:String(sup||'').trim()});
       };
       for(let i=hi+1;i<rows.length;i++){
-        const r=rows[i]; const nm=r[ni]; const sup=r[si];
-        if(!String(nm||'').trim()) continue;
+        const r=rows[i];const nm=r[ni];const sup=r[si];
+        if(!String(nm||'').trim())continue;
         cis.forEach(ci=>{const c=String(r[ci]||'').trim();if(c)add(c,nm,sup);});
         add(nm,nm,sup);
       }
-      S.products=list; S.sales=[]; S.selStore='전체';
-      S.dateFrom=''; S.dateTo='';
-      document.getElementById('date-from').value='';
-      document.getElementById('date-to').value='';
-      S.page=1;
-
-      document.getElementById('sales-file').disabled=false;
-      document.getElementById('sales-lbl').classList.remove('off');
-      document.getElementById('empty').style.display='none';
-      document.getElementById('content').style.display='block';
-      render();
-      toast(`✅ 제품 ${[...new Set(list.map(p=>p.name))].length}개 로드 완료`);
-    } catch(err){toast('❌ 제품 파일 오류: '+err.message,'err');}
+      S.products=list;S.sales=[];S.selStore='전체';S.page=1;
+      enableSalesUpload();
+      saveToDB('products',list);
+      ref('sales').remove();
+      showDashboard();render();
+      toast(`✅ 제품 ${[...new Set(list.map(p=>p.name))].length}개 저장 완료`);
+    }catch(e){toast('❌ 제품 파일 오류: '+e.message,'err');}
   };
-  reader.readAsArrayBuffer(file); this.value='';
+  reader.readAsArrayBuffer(file);this.value='';
 });
 
-// ── 판매 데이터 업로드 ─────────────────────────────────────────
-document.getElementById('sales-file').addEventListener('change', function(e) {
-  const file=e.target.files[0]; if(!file) return;
+// ── 판매 데이터 업로드 ───────────────────────────────────────
+document.getElementById('sales-file').addEventListener('change',function(e){
+  const file=e.target.files[0];if(!file)return;
   const reader=new FileReader();
   reader.onload=function(ev){
-    try {
+    try{
       const wb=XLSX.read(ev.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
-
       let hi=rows.findIndex(r=>r.some(c=>String(c).includes('날짜')||String(c).toLowerCase()==='date'));
-      if(hi<0) hi=0;
+      if(hi<0)hi=0;
       const hdrs=rows[hi].map(h=>String(h).trim());
       const fi=kws=>hdrs.findIndex(h=>kws.some(k=>h.includes(k)));
-
-      const dateI =fi(['날짜','date','일자']);
-      // 거래처 컬럼: "거래처코드" 다음이 "거래처명" (스토어팜, 자사몰 등)
-      const stCodeI=fi(['거래처코드']);
-      const stNmI  =stCodeI>=0 ? stCodeI+1 : fi(['거래처']);
-      const codeI  =fi(['품목명[규격]코드','품목코드','품목명코드']);
-      const prodI  =fi(['품목명[규격]','품목명','제품명']);
-      const qtyI   =fi(['수량','qty']);
-      const supI   =fi(['공급가액','공급가']);
-      const vatI   =fi(['부가세','vat']);
-      const totalI =fi(['합계','total']);
+      const dateI  = fi(['날짜','date','일자']);
+      const stCodeI= fi(['거래처코드']);
+      const stNmI  = stCodeI>=0 ? stCodeI+1 : fi(['거래처']);
+      const codeI  = fi(['품목명[규격]코드','품목코드','품목명코드']);
+      const prodI  = fi(['품목명[규격]','품목명','제품명']);
+      const qtyI   = fi(['수량','qty']);
+      const supI   = fi(['공급가액','공급가']);
+      const vatI   = fi(['부가세','vat']);
+      const totalI = fi(['합계','total']);
 
       const newRows=[];
       for(let i=hi+1;i<rows.length;i++){
         const r=rows[i];
-        if(!r[dateI]) continue;
-        const ds=toDS(r[dateI]); if(!ds) continue;
+        if(!r[dateI])continue;
+        const ds=toDS(r[dateI]);if(!ds)continue;
         const code=String(r[codeI]||'').trim();
         const prodRaw=String(r[prodI]||'').trim();
         const prodName=prodRaw.replace(/\s*\[.*?\]\s*$/,'').trim();
         const matched=S.products.find(p=>p.code===code)||S.products.find(p=>p.name===prodName);
-        // 거래처명: stNmI 컬럼 (예: 스토어팜, 자사몰, 지마켓, 11번가)
         const store=String(r[stNmI]||r[stCodeI]||'').trim()||'기타';
-        newRows.push({
-          date:ds, store,
-          code, productName:matched?matched.name:prodName,
+        newRows.push({date:ds,store,code,
+          productName:matched?matched.name:prodName,
           supplier:matched?matched.supplier:'',
-          qty:Number(r[qtyI])||0, supply:Number(r[supI])||0,
-          vat:Number(r[vatI])||0, total:Number(r[totalI])||0,
-        });
+          qty:Number(r[qtyI])||0,supply:Number(r[supI])||0,
+          vat:Number(r[vatI])||0,total:Number(r[totalI])||0});
       }
-
-      // 중복 합산
       const all=[...S.sales,...newRows];
       const map={};
       all.forEach(row=>{
         const k=`${row.date}||${row.code||row.productName}||${row.store}`;
-        if(!map[k]) map[k]={...row};
+        if(!map[k])map[k]={...row};
         else{map[k].qty+=row.qty;map[k].supply+=row.supply;map[k].vat+=row.vat;map[k].total+=row.total;}
       });
-      S.sales=Object.values(map);
-      S.page=1; S.expanded=null;
-
-      // 날짜 범위 자동 설정 (전체 범위)
+      S.sales=Object.values(map);S.page=1;S.expanded=null;
       const dates=S.sales.map(r=>r.date).sort();
       if(dates.length){
-        // 자동 설정은 하지 않고 placeholder처럼 min/max만
-        document.getElementById('date-from').min=dates[0];
-        document.getElementById('date-from').max=dates[dates.length-1];
-        document.getElementById('date-to').min=dates[0];
-        document.getElementById('date-to').max=dates[dates.length-1];
+        ['date-from','date-to'].forEach(id=>{
+          document.getElementById(id).min=dates[0];
+          document.getElementById(id).max=dates[dates.length-1];
+        });
       }
+      saveToDB('sales',S.sales);
       render();
-      toast(`✅ 판매 데이터 ${newRows.length}행 반영 완료`);
-    } catch(err){toast('❌ 판매 데이터 오류: '+err.message,'err');}
+      toast(`✅ 판매 데이터 ${newRows.length}행 저장 완료`);
+    }catch(e){toast('❌ 판매 데이터 오류: '+e.message,'err');}
   };
-  reader.readAsArrayBuffer(file); this.value='';
+  reader.readAsArrayBuffer(file);this.value='';
 });
 
-// ── 탭 클릭 ──────────────────────────────────────────────────
-document.querySelectorAll('.tbtn').forEach(btn=>{
-  btn.addEventListener('click',function(){
-    S.tab=this.dataset.tab; S.page=1; S.expanded=null; render();
-  });
-});
+// ── 이벤트 ───────────────────────────────────────────────────
+function clearDates(){S.dateFrom='';S.dateTo='';document.getElementById('date-from').value='';document.getElementById('date-to').value='';S.page=1;S.expanded=null;render();}
+document.getElementById('date-from').addEventListener('change',function(){S.dateFrom=this.value;S.page=1;S.expanded=null;render();});
+document.getElementById('date-to').addEventListener('change',function(){S.dateTo=this.value;S.page=1;S.expanded=null;render();});
+document.querySelectorAll('.tbtn').forEach(btn=>btn.addEventListener('click',function(){S.tab=this.dataset.tab;S.page=1;S.expanded=null;render();}));
 
-// ── 렌더 ──────────────────────────────────────────────────────
-function render(){
-  renderSummary(); renderStoreCards(); renderStoreFilterBtns(); renderTable();
+// ── 필터 ─────────────────────────────────────────────────────
+function getFiltered(){
+  return S.sales.filter(r=>
+    (S.selStore==='전체'||r.store===S.selStore)&&
+    (!S.dateFrom||r.date>=S.dateFrom)&&
+    (!S.dateTo||r.date<=S.dateTo)
+  );
 }
+
+// ── 렌더 ─────────────────────────────────────────────────────
+function render(){renderSummary();renderStoreCards();renderFilterBtns();renderTable();}
 
 function renderSummary(){
   const f=getFiltered();
-  document.getElementById('s-qty').textContent   = fmt(f.reduce((a,b)=>a+b.qty,0))+'개';
-  const tot=f.reduce((a,b)=>a+b.total,0);
-  const sup=f.reduce((a,b)=>a+b.supply,0);
-  document.getElementById('s-total').textContent   = tot?fmt(tot)+'원':'-';
-  document.getElementById('s-supply').textContent  = sup?fmt(sup)+'원':'-';
+  document.getElementById('s-qty').textContent=fmt(f.reduce((a,b)=>a+b.qty,0))+'개';
+  const tot=f.reduce((a,b)=>a+b.total,0),sup=f.reduce((a,b)=>a+b.supply,0);
+  document.getElementById('s-total').textContent=tot?fmt(tot)+'원':'-';
+  document.getElementById('s-supply').textContent=sup?fmt(sup)+'원':'-';
   const stores=[...new Set(S.sales.map(r=>r.store))].filter(Boolean);
-  document.getElementById('s-stores').textContent  = stores.length?stores.length+'개':'-';
+  document.getElementById('s-stores').textContent=stores.length?stores.length+'개':'-';
 }
 
 function renderStoreCards(){
@@ -426,15 +476,13 @@ function renderStoreCards(){
   const el=document.getElementById('store-cards');
   if(!stores.length||recent.length<2){el.style.display='none';return;}
   el.style.display='flex';
-
   el.innerHTML=stores.map((st,si)=>{
     const color=PAL[(si+1)%PAL.length];
     const vals=recent.map(d=>S.sales.filter(r=>r.store===st&&r.date===d).reduce((a,b)=>a+b.qty,0));
-    const totalQty=S.sales.filter(r=>r.store===st).reduce((a,b)=>a+b.qty,0);
-    const totalRev=S.sales.filter(r=>r.store===st).reduce((a,b)=>a+b.total,0);
+    const tQty=S.sales.filter(r=>r.store===st).reduce((a,b)=>a+b.qty,0);
+    const tRev=S.sales.filter(r=>r.store===st).reduce((a,b)=>a+b.total,0);
     const active=S.selStore===st;
-    const max=Math.max(...vals,1);
-    const W=70,H=26;
+    const max=Math.max(...vals,1),W=70,H=26;
     const pts=vals.map((v,i)=>[Math.round((i/(vals.length-1))*W),Math.round(H-(v/max)*H)]);
     const poly=[`0,${H}`,...pts.map(p=>p.join(',')),[`${W},${H}`]].join(' ');
     const line=pts.map(p=>p.join(',')).join(' ');
@@ -443,8 +491,8 @@ function renderStoreCards(){
     return `<div class="store-card" onclick="setStore('${st}')"
       style="border-color:${active?color+'55':'#1a1d28'};background:${active?color+'12':'#111420'};">
       <div class="sc-name" style="color:${color};">${st}</div>
-      <div class="sc-qty">${fmt(totalQty)}<span style="font-size:10px;color:#484b5a;margin-left:3px;">개</span></div>
-      <div class="sc-rev">${totalRev?fmt(totalRev)+'원':'-'}</div>
+      <div class="sc-qty">${fmt(tQty)}<span style="font-size:10px;color:#484b5a;margin-left:3px;">개</span></div>
+      <div class="sc-rev">${tRev?fmt(tRev)+'원':'-'}</div>
       <svg width="${W}" height="${H}" style="overflow:visible;display:block;">
         <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="${color}" stop-opacity=".3"/>
@@ -459,23 +507,16 @@ function renderStoreCards(){
   }).join('');
 }
 
-function setStore(st){
-  S.selStore=S.selStore===st?'전체':st;
-  S.page=1; S.expanded=null; render();
-}
+function setStore(st){S.selStore=S.selStore===st?'전체':st;S.page=1;S.expanded=null;render();}
 
-function renderStoreFilterBtns(){
+function renderFilterBtns(){
   const stores=[...new Set(S.sales.map(r=>r.store))].filter(Boolean).sort();
-  const el=document.getElementById('store-filter-btns');
-  el.innerHTML='<span class="filter-lbl">거래처</span>'+
+  document.getElementById('store-filter-btns').innerHTML='<span class="filter-lbl">거래처</span>'+
     ['전체',...stores].map((st,si)=>{
       const color=si===0?'#777':PAL[si%PAL.length];
       const on=S.selStore===st;
-      return `<button class="fbtn${on?' on':''}"
-        style="color:${on?color:'#555'};border-color:${on?color:'#252830'};background:${on?color+'18':'transparent'};"
-        onclick="setStore('${st}')">${st}</button>`;
+      return `<button class="fbtn${on?' on':''}" style="color:${on?color:'#555'};border-color:${on?color:'#252830'};background:${on?color+'18':'transparent'};" onclick="setStore('${st}')">${st}</button>`;
     }).join('');
-  // 탭 버튼 동기화
   document.querySelectorAll('.tbtn').forEach(b=>b.classList.toggle('on',b.dataset.tab===S.tab));
 }
 
@@ -483,47 +524,33 @@ function renderTable(){
   const filtered=getFiltered();
   const area=document.getElementById('table-area');
   const pgEl=document.getElementById('pagination');
-
   if(!filtered.length){
     area.innerHTML=`<div class="no-data">${S.sales.length===0?'판매 데이터를 업로드하면 자동 반영됩니다':'조건에 맞는 데이터가 없습니다'}</div>`;
-    pgEl.innerHTML=''; return;
+    pgEl.innerHTML='';return;
   }
-
-  // 그룹핑
   const grouped={};
   filtered.forEach(r=>{const k=pKey(r);if(!grouped[k])grouped[k]=[];grouped[k].push(r);});
   const periods=Object.keys(grouped).sort().reverse();
   const total=Math.max(1,Math.ceil(periods.length/S.PG));
-  if(S.page>total) S.page=1;
-  const page=periods.slice((S.page-1)*S.PG,S.page*S.PG);
-
-  // 유니크 제품 목록
+  if(S.page>total)S.page=1;
+  const pg=periods.slice((S.page-1)*S.PG,S.page*S.PG);
   const prods=[...new Set(S.products.map(p=>p.name))].filter(Boolean);
   const useProds=prods.length?prods:[...new Set(filtered.map(r=>r.productName))].filter(Boolean).sort();
 
-  area.innerHTML=page.map(period=>{
+  area.innerHTML=pg.map(period=>{
     const rows=grouped[period];
     const agg={};
     useProds.forEach(p=>{agg[p]={qty:0,supply:0,total:0};});
-    rows.forEach(r=>{
-      const k=r.productName;
-      if(!agg[k])agg[k]={qty:0,supply:0,total:0};
-      agg[k].qty+=r.qty; agg[k].supply+=r.supply; agg[k].total+=r.total;
-    });
-    const pQty   =rows.reduce((a,b)=>a+b.qty,0);
-    const pTotal =rows.reduce((a,b)=>a+b.total,0);
+    rows.forEach(r=>{const k=r.productName;if(!agg[k])agg[k]={qty:0,supply:0,total:0};agg[k].qty+=r.qty;agg[k].supply+=r.supply;agg[k].total+=r.total;});
+    const pQty=rows.reduce((a,b)=>a+b.qty,0);
+    const pTotal=rows.reduce((a,b)=>a+b.total,0);
     const pSupply=rows.reduce((a,b)=>a+b.supply,0);
-    const isOpen =S.expanded===period;
-
+    const isOpen=S.expanded===period;
     const tbody=useProds.map((prod,pi)=>{
       const v=agg[prod]||{qty:0,supply:0,total:0};
       const color=PAL[pi%PAL.length];
       const pct=pQty?Math.round((v.qty/pQty)*100):0;
-      const bar=v.qty>0
-        ?`<div style="display:flex;align-items:center;gap:4px;">
-            <div style="height:5px;border-radius:3px;background:${color};width:${Math.max(pct,1)}%;max-width:100%;"></div>
-            <span style="font-size:9px;color:#484b5a;">${pct}%</span>
-          </div>`:'-';
+      const bar=v.qty>0?`<div style="display:flex;align-items:center;gap:4px;"><div style="height:5px;border-radius:3px;background:${color};width:${Math.max(pct,1)}%;max-width:100%;"></div><span style="font-size:9px;color:#484b5a;">${pct}%</span></div>`:'-';
       return `<tr style="opacity:${v.qty===0?.22:1};">
         <td style="color:#2e3142;font-size:10px;">${pi+1}</td>
         <td>${prod}</td>
@@ -533,27 +560,18 @@ function renderTable(){
         <td>${bar}</td>
       </tr>`;
     }).join('');
-
     return `<div class="period-block">
       <div class="period-hd${isOpen?' open':''}" onclick="toggleP('${period}')">
         <div style="display:flex;align-items:center;">
           <span class="plabel">${pDisp(period)}</span>
-          <span class="pmeta">
-            판매 <b>${fmt(pQty)}개</b>
-            ${pTotal?` &nbsp;·&nbsp; 합계 <b class="green">${fmt(pTotal)}원</b>`:''}
-            ${pSupply?` &nbsp;·&nbsp; 공급가 <b style="color:#F7A54F;">${fmt(pSupply)}원</b>`:''}
-          </span>
+          <span class="pmeta">판매 <b>${fmt(pQty)}개</b>${pTotal?` &nbsp;·&nbsp; 합계 <b style="color:#54D07A;">${fmt(pTotal)}원</b>`:''}</span>
         </div>
         <span class="parr${isOpen?' open':''}">▾</span>
       </div>
       ${isOpen?`<table>
         <thead><tr>
-          <th style="width:30px;">#</th>
-          <th style="text-align:left;">제품명</th>
-          <th class="r">수량</th>
-          <th class="r">공급가액</th>
-          <th class="r">합계금액</th>
-          <th style="width:110px;">비중</th>
+          <th style="width:30px;">#</th><th style="text-align:left;">제품명</th>
+          <th class="r">수량</th><th class="r">공급가액</th><th class="r">합계금액</th><th style="width:110px;">비중</th>
         </tr></thead>
         <tbody>${tbody}</tbody>
         <tfoot><tr>
@@ -567,21 +585,18 @@ function renderTable(){
     </div>`;
   }).join('');
 
-  // 페이지네이션
   if(total<=1){pgEl.innerHTML='';return;}
-  let html='';
-  html+=`<button class="pgbtn" onclick="goPage(${S.page-1})" ${S.page===1?'disabled':''}>‹</button>`;
+  let html=`<button class="pgbtn" onclick="goPage(${S.page-1})" ${S.page===1?'disabled':''}>‹</button>`;
   const show=9,half=Math.floor(show/2);
   let s=Math.max(1,S.page-half),e=Math.min(total,s+show-1);
-  if(e-s<show-1) s=Math.max(1,e-show+1);
-  for(let p=s;p<=e;p++)
-    html+=`<button class="pgbtn${p===S.page?' on':''}" onclick="goPage(${p})">${p}</button>`;
+  if(e-s<show-1)s=Math.max(1,e-show+1);
+  for(let p=s;p<=e;p++)html+=`<button class="pgbtn${p===S.page?' on':''}" onclick="goPage(${p})">${p}</button>`;
   html+=`<button class="pgbtn" onclick="goPage(${S.page+1})" ${S.page===total?'disabled':''}>›</button>`;
   pgEl.innerHTML=html;
 }
 
-function toggleP(p){S.expanded=S.expanded===p?null:p; renderTable();}
-function goPage(p){S.page=p; S.expanded=null; renderTable();}
+function toggleP(p){S.expanded=S.expanded===p?null:p;renderTable();}
+function goPage(p){S.page=p;S.expanded=null;renderTable();}
 </script>
 </body>
 </html>
