@@ -74,7 +74,10 @@ input{font-family:inherit;}
 .sum-card{background:#fff;border-radius:11px;padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;box-shadow:0 2px 10px #0000000a;}
 .sum-card .lbl{font-size:10px;color:#aaa;letter-spacing:.3px;margin-bottom:8px;}
 .sum-card .val{font-size:20px;font-weight:700;letter-spacing:-.5px;}
-.sum-card .ico{font-size:20px;opacity:.3;}
+.sum-card .ico{font-size:20px;opacity:.3;flex-shrink:0;}
+.yoy{font-size:10px;margin-top:5px;color:#aaa;line-height:1.5;}
+.yoy .yoy-pct{font-weight:700;margin-left:4px;}
+.yoy .up{color:#2eaa60;}.yoy .dn{color:#e03030;}.yoy .flat{color:#aaa;}
 
 #store-cards{display:flex;gap:10px;margin-bottom:16px;overflow-x:auto;padding-bottom:3px;}
 .store-card{background:#fff;border:1px solid #e4e7f0;border-radius:11px;padding:12px 15px;min-width:148px;cursor:pointer;transition:all .18s;flex-shrink:0;box-shadow:0 2px 8px #0000000a;}
@@ -406,10 +409,37 @@ tfoot td{padding:7px 12px;font-weight:700;}
 
   <div id="dashboard" style="display:none;">
     <div class="sum-grid">
-      <div class="sum-card" style="border:1px solid #4F8EF718;"><div><div class="lbl">총 판매 수량</div><div class="val" id="s-qty" style="color:#4F8EF7;">-</div></div><div class="ico">📦</div></div>
-      <div class="sum-card" style="border:1px solid #54D07A18;"><div><div class="lbl">총 합계금액</div><div class="val" id="s-total" style="color:#2eaa60;">-</div></div><div class="ico">💰</div></div>
-      <div class="sum-card" style="border:1px solid #F7A54F18;"><div><div class="lbl">공급가액 합계</div><div class="val" id="s-supply" style="color:#e07820;">-</div></div><div class="ico">🏷️</div></div>
-      <div class="sum-card" style="border:1px solid #A054F718;"><div><div class="lbl">거래처 수</div><div class="val" id="s-stores" style="color:#A054F7;">-</div></div><div class="ico">🏪</div></div>
+      <div class="sum-card" style="border:1px solid #4F8EF718;">
+        <div style="flex:1;min-width:0;">
+          <div class="lbl" id="lbl-qty">올해 판매 수량</div>
+          <div class="val" id="s-qty" style="color:#4F8EF7;">-</div>
+          <div class="yoy" id="yoy-qty"></div>
+        </div>
+        <div class="ico">📦</div>
+      </div>
+      <div class="sum-card" style="border:1px solid #54D07A18;">
+        <div style="flex:1;min-width:0;">
+          <div class="lbl" id="lbl-total">올해 합계금액</div>
+          <div class="val" id="s-total" style="color:#2eaa60;">-</div>
+          <div class="yoy" id="yoy-total"></div>
+        </div>
+        <div class="ico">💰</div>
+      </div>
+      <div class="sum-card" style="border:1px solid #F7A54F18;">
+        <div style="flex:1;min-width:0;">
+          <div class="lbl" id="lbl-supply">올해 공급가액</div>
+          <div class="val" id="s-supply" style="color:#e07820;">-</div>
+          <div class="yoy" id="yoy-supply"></div>
+        </div>
+        <div class="ico">🏷️</div>
+      </div>
+      <div class="sum-card" style="border:1px solid #A054F718;">
+        <div style="flex:1;min-width:0;">
+          <div class="lbl">거래처 수</div>
+          <div class="val" id="s-stores" style="color:#A054F7;">-</div>
+        </div>
+        <div class="ico">🏪</div>
+      </div>
     </div>
     <div id="store-cards"></div>
     <div id="stats-panel">
@@ -1407,12 +1437,54 @@ function clearSearch(){
 function render(){renderSummary();renderStoreCards();renderFilterBtns();renderTable();}
 
 function renderSummary(){
-  const f=getFiltered();
-  document.getElementById('s-qty').textContent=fmt(f.reduce((a,b)=>a+b.qty,0))+'개';
-  const tot=f.reduce((a,b)=>a+b.total,0),sup=f.reduce((a,b)=>a+b.supply,0);
-  document.getElementById('s-total').textContent=tot?fmt(tot)+'원':'-';
-  document.getElementById('s-supply').textContent=sup?fmt(sup)+'원':'-';
-  document.getElementById('s-stores').textContent=[...new Set(S.sales.map(r=>r.store))].filter(Boolean).length+'개';
+  const thisYear = new Date().getFullYear();
+  const lastYear = thisYear - 1;
+
+  // 올해 / 작년 데이터 분리 (필터 무관하게 전체 기준)
+  const thisYearData = S.sales.filter(r => r.date && r.date.startsWith(String(thisYear)));
+  const lastYearData = S.sales.filter(r => r.date && r.date.startsWith(String(lastYear)));
+
+  const tyQty   = thisYearData.reduce((a,b)=>a+b.qty, 0);
+  const tyTotal = thisYearData.reduce((a,b)=>a+b.total, 0);
+  const tySupply= thisYearData.reduce((a,b)=>a+b.supply, 0);
+
+  const lyQty   = lastYearData.reduce((a,b)=>a+b.qty, 0);
+  const lyTotal = lastYearData.reduce((a,b)=>a+b.total, 0);
+  const lySupply= lastYearData.reduce((a,b)=>a+b.supply, 0);
+
+  // 올해 데이터가 없으면 전체 합계로 폴백
+  const hasThisYear = thisYearData.length > 0;
+  const f = getFiltered();
+
+  const dispQty    = hasThisYear ? tyQty    : f.reduce((a,b)=>a+b.qty,0);
+  const dispTotal  = hasThisYear ? tyTotal  : f.reduce((a,b)=>a+b.total,0);
+  const dispSupply = hasThisYear ? tySupply : f.reduce((a,b)=>a+b.supply,0);
+
+  // 라벨
+  document.getElementById('lbl-qty').textContent    = hasThisYear ? `${thisYear}년 판매 수량` : '총 판매 수량';
+  document.getElementById('lbl-total').textContent  = hasThisYear ? `${thisYear}년 합계금액`  : '총 합계금액';
+  document.getElementById('lbl-supply').textContent = hasThisYear ? `${thisYear}년 공급가액`  : '공급가액 합계';
+
+  document.getElementById('s-qty').textContent    = fmt(dispQty)+'개';
+  document.getElementById('s-total').textContent  = dispTotal  ? fmt(dispTotal)+'원'  : '-';
+  document.getElementById('s-supply').textContent = dispSupply ? fmt(dispSupply)+'원' : '-';
+  document.getElementById('s-stores').textContent = [...new Set(S.sales.map(r=>r.store))].filter(Boolean).length+'개';
+
+  // YoY 비교 (올해 데이터 있을 때만)
+  function yoyHtml(ty, ly, unit=''){
+    if(!hasThisYear || (!ty && !ly)) return '';
+    const lyStr = ly ? fmt(ly)+unit : '-';
+    if(!ly) return `<span>작년 ${lyStr}</span>`;
+    const pct = Math.round((ty - ly) / ly * 100);
+    const cls = pct > 0 ? 'up' : pct < 0 ? 'dn' : 'flat';
+    const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '—';
+    const sign = pct > 0 ? '+' : '';
+    return `작년 ${lyStr} <span class="yoy-pct ${cls}">${arrow}${sign}${pct}%</span>`;
+  }
+
+  document.getElementById('yoy-qty').innerHTML    = yoyHtml(tyQty,    lyQty,    '개');
+  document.getElementById('yoy-total').innerHTML  = yoyHtml(tyTotal,  lyTotal,  '원');
+  document.getElementById('yoy-supply').innerHTML = yoyHtml(tySupply, lySupply, '원');
 }
 
 function renderStoreCards(){
