@@ -1535,16 +1535,40 @@ function renderSummary(){
 
 function renderStoreCards(){
   const stores=[...new Set(S.sales.map(r=>r.store))].filter(Boolean).sort();
-  const recent=[...new Set(S.sales.map(r=>r.date))].sort().slice(-10);
   const el=document.getElementById('store-cards');
-  if(!stores.length||recent.length<2){el.style.display='none';return;}
+  if(!stores.length){el.style.display='none';return;}
   el.style.display='flex';
+
+  // 수량/금액 기준: 항상 올해 YTD 고정
+  const today=new Date();
+  const thisYear=today.getFullYear();
+  const mm=String(today.getMonth()+1).padStart(2,'0');
+  const dd=String(today.getDate()).padStart(2,'0');
+  const baseFrom=`${thisYear}-01-01`, baseTo=`${thisYear}-${mm}-${dd}`;
+  const baseLabel=`${thisYear}년 YTD`;
+
+  // 전체 합계 (비중 계산용)
+  const allData=S.sales.filter(r=>r.date>=baseFrom&&r.date<=baseTo);
+  const totalQty=allData.reduce((a,b)=>a+b.qty,0);
+  const totalRev=allData.reduce((a,b)=>a+b.total,0);
+
+  // 그래프용: 기준 기간 내 날짜들 최근 10일
+  const baseDates=[...new Set(allData.map(r=>r.date))].sort().slice(-10);
+  const recent=baseDates.length>=2 ? baseDates : [...new Set(S.sales.map(r=>r.date))].sort().slice(-10);
+
   el.innerHTML=stores.map((st,si)=>{
     const color=PAL[(si+1)%PAL.length];
-    const vals=recent.map(d=>S.sales.filter(r=>r.store===st&&r.date===d).reduce((a,b)=>a+b.qty,0));
-    const tQty=S.sales.filter(r=>r.store===st).reduce((a,b)=>a+b.qty,0);
-    const tRev=S.sales.filter(r=>r.store===st).reduce((a,b)=>a+b.total,0);
+    const stData=S.sales.filter(r=>r.store===st&&r.date>=baseFrom&&r.date<=baseTo);
+    const tQty=stData.reduce((a,b)=>a+b.qty,0);
+    const tRev=stData.reduce((a,b)=>a+b.total,0);
     const active=S.selStore===st;
+
+    // 비중
+    const qtyPct = totalQty ? Math.round(tQty/totalQty*100) : 0;
+    const revPct = totalRev ? Math.round(tRev/totalRev*100) : 0;
+    const barW   = Math.max(qtyPct, 1);
+
+    const vals=recent.map(d=>S.sales.filter(r=>r.store===st&&r.date===d).reduce((a,b)=>a+b.qty,0));
     const max=Math.max(...vals,1),W=70,H=26;
     const pts=vals.map((v,i)=>[Math.round((i/(vals.length-1))*W),Math.round(H-(v/max)*H)]);
     const poly=[`0,${H}`,...pts.map(p=>p.join(',')),[`${W},${H}`]].join(' ');
@@ -1554,8 +1578,15 @@ function renderStoreCards(){
     return `<div class="store-card" onclick="setStore('${st}')"
       style="border-color:${active?color+'66':'#e4e7f0'};background:${active?color+'0d':'#fff'};">
       <div class="sc-name" style="color:${color};">${st}</div>
-      <div class="sc-qty">${fmt(tQty)}<span style="font-size:10px;color:#aaa;margin-left:3px;">개</span></div>
-      <div class="sc-rev">${tRev?fmt(tRev)+'원':'-'}</div>
+      <div class="sc-qty">${fmt(tQty)}<span style="font-size:10px;color:#aaa;margin-left:3px;">개</span>
+        <span style="font-size:10px;font-weight:600;color:${color};margin-left:5px;">${qtyPct}%</span>
+      </div>
+      <div class="sc-rev">${tRev?fmt(tRev)+'원':'-'}
+        <span style="font-size:9px;color:#bbb;margin-left:4px;">매출 ${revPct}%</span>
+      </div>
+      <div style="height:3px;background:#f0f0f5;border-radius:2px;margin:6px 0 8px;">
+        <div style="height:3px;border-radius:2px;background:${color};width:${barW}%;transition:width .3s;"></div>
+      </div>
       <svg width="${W}" height="${H}" style="overflow:visible;display:block;">
         <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stop-color="${color}" stop-opacity=".25"/>
@@ -1565,7 +1596,7 @@ function renderStoreCards(){
         <polyline points="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
         <circle cx="${last[0]}" cy="${last[1]}" r="3" fill="${color}"/>
       </svg>
-      <div class="sc-sub">최근 ${recent.length}일 추이</div>
+      <div class="sc-sub" style="font-size:9px;color:#bbb;">${baseLabel} 기준</div>
     </div>`;
   }).join('');
 }
