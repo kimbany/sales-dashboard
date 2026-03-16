@@ -217,6 +217,81 @@ tfoot td{padding:7px 12px;font-weight:700;}
 .sf-clear{font-size:10px;color:#aaa;background:#e4e7f0;border:none;border-radius:5px;padding:3px 8px;cursor:pointer;}
 .sf-store-btn{padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid #e0e3ef;color:#aaa;background:transparent;cursor:pointer;transition:all .14s;white-space:nowrap;}
 .sf-store-btn.on{border-color:currentColor;}
+
+/* ── 모바일 반응형 ── */
+@media(max-width:640px){
+  /* 헤더 */
+  #header{padding:0 12px;height:auto;min-height:50px;flex-wrap:wrap;gap:6px;padding-top:8px;padding-bottom:8px;}
+  #logo .logo-badge{display:none;}
+  .logo-title{font-size:13px;}
+  #header-right{gap:5px;flex-wrap:nowrap;}
+  .upload-btn,.hdr-btn{padding:6px 10px;font-size:13px;}
+  .btn-txt{display:none;}  /* 모바일: 버튼 텍스트 숨기고 아이콘만 */
+
+  /* 본문 패딩 */
+  #content{padding:10px 12px;}
+
+  /* 요약 카드 - 2x2 그리드 */
+  .sum-grid{grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:10px;}
+  .sum-card .val{font-size:16px;}
+  .sum-card{padding:12px 12px;}
+  .sum-card .ico{font-size:16px;}
+
+  /* 거래처 카드 - 가로스크롤 유지하되 크기 줄임 */
+  #store-cards{gap:8px;margin-bottom:10px;}
+  .store-card{min-width:130px;padding:10px 12px;}
+  .sc-qty{font-size:15px;}
+
+  /* stats 패널 */
+  #stats-panel{padding:12px 12px;}
+
+  /* 거래처 필터 버튼 */
+  .fbtn{padding:4px 9px;font-size:10px;}
+  .filter-lbl{font-size:9px;}
+
+  /* 검색창 */
+  #search-box{max-width:100%;}
+  #prod-search-main{font-size:11px;}
+
+  /* 탭/날짜 컨트롤 */
+  .ctrl-row2{gap:6px;}
+  .tbtn{padding:5px 10px;font-size:11px;}
+  .qbtn{padding:4px 7px;font-size:10px;}
+  #date-range{padding:4px 8px;gap:4px;}
+  #date-range input[type=date]{width:95px;font-size:10px;}
+
+  /* 기간 블록 테이블 */
+  .pmeta{font-size:10px;margin-left:6px;}
+  .plabel{font-size:10px;padding:2px 7px;}
+  table{font-size:11px;}
+  thead th{padding:6px 8px;font-size:9px;}
+  tbody td{padding:6px 8px;}
+  tfoot td{padding:6px 8px;}
+
+  /* 모달 전체화면 */
+  .modal{width:100%;max-width:100%;height:100%;max-height:100%;border-radius:0;}
+  .modal-overlay{align-items:flex-end;}
+  .modal-body{padding:14px 14px;}
+  .modal-hd{padding:12px 16px;}
+  .modal-foot{padding:10px 16px;}
+
+  /* 제품 관리 모달 */
+  .bulk-bar{gap:6px;padding:7px 10px;}
+  .bulk-bar .btn{padding:4px 8px;font-size:10px;}
+  .prod-row{padding:10px 12px;}
+  .prod-row-top{gap:7px;flex-wrap:wrap;}
+  .prod-name-input{font-size:12px;padding:6px 10px;}
+  .code-chip input{width:85px;font-size:11px;}
+
+  /* 판매 편집 모달 */
+  #sales-filter-bar{padding:10px 12px;gap:8px;}
+  .sf-row{gap:8px;}
+  .sales-edit-table th{padding:6px 7px;font-size:9px;}
+  .sales-edit-table td{padding:4px 5px;font-size:11px;}
+
+  /* 토스트 */
+  #toast{top:auto;bottom:16px;right:12px;left:12px;text-align:center;}
+}
 </style>
 </head>
 <body>
@@ -232,10 +307,10 @@ tfoot td{padding:7px 12px;font-weight:700;}
   </div>
   <div id="header-right">
     <span id="sync-badge"></span>
-    <label class="upload-btn blue">📋 제품 업로드<input type="file" id="product-file" accept=".xlsx,.xls,.csv"/></label>
-    <label class="upload-btn green off" id="sales-lbl">📂 판매 업로드<input type="file" id="sales-file" accept=".xlsx,.xls,.csv" disabled/></label>
-    <button class="hdr-btn" onclick="openProdModal()">⚙️ 제품 관리</button>
-    <button class="hdr-btn" onclick="openSalesModal()">✏️ 판매 편집</button>
+    <label class="upload-btn blue">📋 <span class="btn-txt">제품 업로드</span><input type="file" id="product-file" accept=".xlsx,.xls,.csv"/></label>
+    <label class="upload-btn green off" id="sales-lbl">📂 <span class="btn-txt">판매 업로드</span><input type="file" id="sales-file" accept=".xlsx,.xls,.csv" disabled/></label>
+    <button class="hdr-btn" onclick="openProdModal()">⚙️ <span class="btn-txt">제품 관리</span></button>
+    <button class="hdr-btn" onclick="openSalesModal()">✏️ <span class="btn-txt">판매 편집</span></button>
   </div>
 </div>
 
