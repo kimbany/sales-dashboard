@@ -78,6 +78,9 @@ input{font-family:inherit;}
 .yoy{font-size:10px;margin-top:5px;color:#aaa;line-height:1.5;}
 .yoy .yoy-pct{font-weight:700;margin-left:4px;}
 .yoy .up{color:#2eaa60;}.yoy .dn{color:#e03030;}.yoy .flat{color:#aaa;}
+.filter-sep{border-top:1px dashed #e4e7f0;margin:8px 0 6px;}
+.filter-lbl2{font-size:9px;color:#4F8EF7;background:#4F8EF710;padding:1px 6px;border-radius:3px;display:inline-block;margin-bottom:4px;}
+.filter-val{font-size:14px !important;}
 
 #store-cards{display:flex;gap:10px;margin-bottom:16px;overflow-x:auto;padding-bottom:3px;}
 .store-card{background:#fff;border:1px solid #e4e7f0;border-radius:11px;padding:12px 15px;min-width:148px;cursor:pointer;transition:all .18s;flex-shrink:0;box-shadow:0 2px 8px #0000000a;}
@@ -414,6 +417,10 @@ tfoot td{padding:7px 12px;font-weight:700;}
           <div class="lbl" id="lbl-qty">올해 판매 수량</div>
           <div class="val" id="s-qty" style="color:#4F8EF7;">-</div>
           <div class="yoy" id="yoy-qty"></div>
+          <div class="filter-sep" id="fsep-qty" style="display:none;"></div>
+          <div class="lbl filter-lbl2" id="lbl-fqty" style="display:none;"></div>
+          <div class="val filter-val" id="s-fqty" style="color:#4F8EF7;display:none;"></div>
+          <div class="yoy" id="yoy-fqty"></div>
         </div>
         <div class="ico">📦</div>
       </div>
@@ -422,6 +429,10 @@ tfoot td{padding:7px 12px;font-weight:700;}
           <div class="lbl" id="lbl-total">올해 합계금액</div>
           <div class="val" id="s-total" style="color:#2eaa60;">-</div>
           <div class="yoy" id="yoy-total"></div>
+          <div class="filter-sep" id="fsep-total" style="display:none;"></div>
+          <div class="lbl filter-lbl2" id="lbl-ftotal" style="display:none;"></div>
+          <div class="val filter-val" id="s-ftotal" style="color:#2eaa60;display:none;"></div>
+          <div class="yoy" id="yoy-ftotal"></div>
         </div>
         <div class="ico">💰</div>
       </div>
@@ -430,6 +441,10 @@ tfoot td{padding:7px 12px;font-weight:700;}
           <div class="lbl" id="lbl-supply">올해 공급가액</div>
           <div class="val" id="s-supply" style="color:#e07820;">-</div>
           <div class="yoy" id="yoy-supply"></div>
+          <div class="filter-sep" id="fsep-supply" style="display:none;"></div>
+          <div class="lbl filter-lbl2" id="lbl-fsupply" style="display:none;"></div>
+          <div class="val filter-val" id="s-fsupply" style="color:#e07820;display:none;"></div>
+          <div class="yoy" id="yoy-fsupply"></div>
         </div>
         <div class="ico">🏷️</div>
       </div>
@@ -1437,54 +1452,85 @@ function clearSearch(){
 function render(){renderSummary();renderStoreCards();renderFilterBtns();renderTable();}
 
 function renderSummary(){
-  const thisYear = new Date().getFullYear();
-  const lastYear = thisYear - 1;
+  const today = new Date();
+  const thisYear = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
 
-  // 올해 / 작년 데이터 분리 (필터 무관하게 전체 기준)
-  const thisYearData = S.sales.filter(r => r.date && r.date.startsWith(String(thisYear)));
-  const lastYearData = S.sales.filter(r => r.date && r.date.startsWith(String(lastYear)));
+  // ── 1) 오늘 기준 YTD (항상 표시) ──────────────────────────
+  const ytdFrom = `${thisYear}-01-01`;
+  const ytdTo   = `${thisYear}-${mm}-${dd}`;
+  const lyFrom  = `${thisYear-1}-01-01`;
+  const lyTo    = `${thisYear-1}-${mm}-${dd}`;
 
-  const tyQty   = thisYearData.reduce((a,b)=>a+b.qty, 0);
-  const tyTotal = thisYearData.reduce((a,b)=>a+b.total, 0);
-  const tySupply= thisYearData.reduce((a,b)=>a+b.supply, 0);
+  const ytdData = S.sales.filter(r=>r.date>=ytdFrom && r.date<=ytdTo);
+  const lyData  = S.sales.filter(r=>r.date>=lyFrom  && r.date<=lyTo);
 
-  const lyQty   = lastYearData.reduce((a,b)=>a+b.qty, 0);
-  const lyTotal = lastYearData.reduce((a,b)=>a+b.total, 0);
-  const lySupply= lastYearData.reduce((a,b)=>a+b.supply, 0);
+  const tyQty=ytdData.reduce((a,b)=>a+b.qty,0),    lyQty=lyData.reduce((a,b)=>a+b.qty,0);
+  const tyTotal=ytdData.reduce((a,b)=>a+b.total,0), lyTotal=lyData.reduce((a,b)=>a+b.total,0);
+  const tySupply=ytdData.reduce((a,b)=>a+b.supply,0),lySupply=lyData.reduce((a,b)=>a+b.supply,0);
 
-  // 올해 데이터가 없으면 전체 합계로 폴백
-  const hasThisYear = thisYearData.length > 0;
-  const f = getFiltered();
+  const ytdRange = `${thisYear}.01.01~${mm}.${dd}`;
+  document.getElementById('lbl-qty').textContent    = `판매 수량 (${ytdRange})`;
+  document.getElementById('lbl-total').textContent  = `합계금액 (${ytdRange})`;
+  document.getElementById('lbl-supply').textContent = `공급가액 (${ytdRange})`;
 
-  const dispQty    = hasThisYear ? tyQty    : f.reduce((a,b)=>a+b.qty,0);
-  const dispTotal  = hasThisYear ? tyTotal  : f.reduce((a,b)=>a+b.total,0);
-  const dispSupply = hasThisYear ? tySupply : f.reduce((a,b)=>a+b.supply,0);
-
-  // 라벨
-  document.getElementById('lbl-qty').textContent    = hasThisYear ? `${thisYear}년 판매 수량` : '총 판매 수량';
-  document.getElementById('lbl-total').textContent  = hasThisYear ? `${thisYear}년 합계금액`  : '총 합계금액';
-  document.getElementById('lbl-supply').textContent = hasThisYear ? `${thisYear}년 공급가액`  : '공급가액 합계';
-
-  document.getElementById('s-qty').textContent    = fmt(dispQty)+'개';
-  document.getElementById('s-total').textContent  = dispTotal  ? fmt(dispTotal)+'원'  : '-';
-  document.getElementById('s-supply').textContent = dispSupply ? fmt(dispSupply)+'원' : '-';
+  document.getElementById('s-qty').textContent    = fmt(tyQty)+'개';
+  document.getElementById('s-total').textContent  = tyTotal  ? fmt(tyTotal)+'원'  : '-';
+  document.getElementById('s-supply').textContent = tySupply ? fmt(tySupply)+'원' : '-';
   document.getElementById('s-stores').textContent = [...new Set(S.sales.map(r=>r.store))].filter(Boolean).length+'개';
 
-  // YoY 비교 (올해 데이터 있을 때만)
-  function yoyHtml(ty, ly, unit=''){
-    if(!hasThisYear || (!ty && !ly)) return '';
-    const lyStr = ly ? fmt(ly)+unit : '-';
-    if(!ly) return `<span>작년 ${lyStr}</span>`;
-    const pct = Math.round((ty - ly) / ly * 100);
-    const cls = pct > 0 ? 'up' : pct < 0 ? 'dn' : 'flat';
-    const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '—';
-    const sign = pct > 0 ? '+' : '';
-    return `작년 ${lyStr} <span class="yoy-pct ${cls}">${arrow}${sign}${pct}%</span>`;
+  function yoyHtml(ty,ly,unit,lyF,lyT){
+    const lyRange=`작년(${lyF.slice(2).replace(/-/g,'.')}~${lyT.slice(5).replace(/-/g,'.')})`;
+    const lyDisp=ly?fmt(ly)+unit:'-';
+    if(!ly) return `${lyRange} ${lyDisp}`;
+    const pct=Math.round((ty-ly)/ly*100);
+    const cls=pct>0?'up':pct<0?'dn':'flat';
+    const arrow=pct>0?'▲':pct<0?'▼':'—';
+    const sign=pct>0?'+':'';
+    return `${lyRange} ${lyDisp} <span class="yoy-pct ${cls}">${arrow}${sign}${pct}%</span>`;
   }
 
-  document.getElementById('yoy-qty').innerHTML    = yoyHtml(tyQty,    lyQty,    '개');
-  document.getElementById('yoy-total').innerHTML  = yoyHtml(tyTotal,  lyTotal,  '원');
-  document.getElementById('yoy-supply').innerHTML = yoyHtml(tySupply, lySupply, '원');
+  document.getElementById('yoy-qty').innerHTML    = yoyHtml(tyQty,   lyQty,   '개',lyFrom,lyTo);
+  document.getElementById('yoy-total').innerHTML  = yoyHtml(tyTotal, lyTotal, '원',lyFrom,lyTo);
+  document.getElementById('yoy-supply').innerHTML = yoyHtml(tySupply,lySupply,'원',lyFrom,lyTo);
+
+  // ── 2) 날짜 필터 기간 (필터 있을 때만 추가 표시) ────────────
+  const hasFilter = S.dateFrom || S.dateTo;
+  ['qty','total','supply'].forEach(k=>{
+    document.getElementById(`fsep-${k}`).style.display   = hasFilter?'block':'none';
+    document.getElementById(`lbl-f${k}`).style.display   = hasFilter?'inline-block':'none';
+    document.getElementById(`s-f${k}`).style.display     = hasFilter?'block':'none';
+  });
+
+  if(hasFilter){
+    const fFrom = S.dateFrom || S.dateTo;
+    const fTo   = S.dateTo   || S.dateFrom;
+    const fLyFrom = fFrom.replace(/^\d{4}/,y=>String(parseInt(y)-1));
+    const fLyTo   = fTo.replace(/^\d{4}/,y=>String(parseInt(y)-1));
+
+    const fData  = S.sales.filter(r=>r.date>=fFrom  && r.date<=fTo);
+    const fLyData= S.sales.filter(r=>r.date>=fLyFrom && r.date<=fLyTo);
+
+    const fQty=fData.reduce((a,b)=>a+b.qty,0),   flQty=fLyData.reduce((a,b)=>a+b.qty,0);
+    const fTotal=fData.reduce((a,b)=>a+b.total,0),flTotal=fLyData.reduce((a,b)=>a+b.total,0);
+    const fSupply=fData.reduce((a,b)=>a+b.supply,0),flSupply=fLyData.reduce((a,b)=>a+b.supply,0);
+
+    const fDisp = fFrom===fTo ? fFrom.slice(2).replace(/-/g,'.') :
+      `${fFrom.slice(2).replace(/-/g,'.')}~${fTo.slice(5).replace(/-/g,'.')}`;
+
+    document.getElementById('lbl-fqty').textContent    = `필터기간 (${fDisp})`;
+    document.getElementById('lbl-ftotal').textContent  = `필터기간 (${fDisp})`;
+    document.getElementById('lbl-fsupply').textContent = `필터기간 (${fDisp})`;
+
+    document.getElementById('s-fqty').textContent    = fmt(fQty)+'개';
+    document.getElementById('s-ftotal').textContent  = fTotal  ? fmt(fTotal)+'원'  : '-';
+    document.getElementById('s-fsupply').textContent = fSupply ? fmt(fSupply)+'원' : '-';
+
+    document.getElementById('yoy-fqty').innerHTML    = yoyHtml(fQty,   flQty,   '개',fLyFrom,fLyTo);
+    document.getElementById('yoy-ftotal').innerHTML  = yoyHtml(fTotal, flTotal, '원',fLyFrom,fLyTo);
+    document.getElementById('yoy-fsupply').innerHTML = yoyHtml(fSupply,flSupply,'원',fLyFrom,fLyTo);
+  }
 }
 
 function renderStoreCards(){
