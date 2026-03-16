@@ -1017,6 +1017,469 @@ function renderStats(){
   });
 }
 
+// ═══════════════════════════════════════════════════════════
+// ── 제품 관리 모달 ──────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+let _pid=0;
+function mkpid(){ return ++_pid; }
+function getProd(pid){ return editProds.find(p=>p._pid===pid); }
+
+function openProdModal(){
+  if(!S.products.length){toast('제품 리스트가 없습니다','err');return;}
+  editProds=JSON.parse(JSON.stringify(S.products)).map(p=>({...p, _pid:mkpid()}));
+  selectedProds=new Set();
+  document.getElementById('prod-search').value='';
+  document.getElementById('upload-error-area').innerHTML='';
+  renderProdModal();
+  document.getElementById('prod-modal').classList.add('show');
+}
+
+function getFilteredProds(){
+  const q=document.getElementById('prod-search').value.trim().toLowerCase();
+  return q ? editProds.filter(p=>
+    p.name.toLowerCase().includes(q)||
+    String(p.code1||'').toLowerCase().includes(q)||
+    (p.aliases||[]).some(a=>String(a.code||'').toLowerCase().includes(q))
+  ) : editProds;
+}
+
+function renderProdModal(){
+  const list=getFilteredProds();
+  document.getElementById('prod-count').textContent=`${editProds.length}개 제품`;
+  updateBulkBar();
+  const c1Map={};
+  editProds.forEach(p=>{if(p.code1){if(!c1Map[p.code1])c1Map[p.code1]=0;c1Map[p.code1]++;}});
+  const dupC1=Object.entries(c1Map).filter(([,n])=>n>1).map(([c])=>c);
+  document.getElementById('dup-warn-area').innerHTML=dupC1.length
+    ? `<div class="dup-warn">⚠️ 메인코드 중복 ${dupC1.length}건: ${dupC1.join(', ')}</div>` : '';
+
+  document.getElementById('prod-list').innerHTML=list.map(p=>{
+    const pid=p._pid;
+    const aliases=p.aliases||[];
+    const isChecked=selectedProds.has(pid);
+    const aliasHtml=aliases.map((a,ai)=>`
+      <div class="code-chip" data-ai="${ai}">
+        <span class="code-label">${escH(a.label)}</span>
+        <input value="${escH(a.code)}" placeholder="없음"
+          oninput="getProd(${pid}).aliases[${ai}].code=this.value"/>
+        <span class="chip-del" onclick="removeAlias(${pid},${ai})">✕</span>
+      </div>`).join('');
+    return `<div class="prod-row${isChecked?' selected':''}" id="prow-${pid}" data-pid="${pid}">
+      <div class="prod-row-top">
+        <input type="checkbox" class="prod-row-check" ${isChecked?'checked':''}
+          onchange="toggleCheck(${pid},this.checked)"/>
+        <input class="prod-name-input" value="${escH(p.name)}" placeholder="제품명"
+          oninput="getProd(${pid}).name=this.value"/>
+        <input class="prod-name-input" value="${escH(p.supplier||'')}" placeholder="공급사"
+          style="max-width:120px;color:#888;font-size:12px;"
+          oninput="getProd(${pid}).supplier=this.value"/>
+        <button class="btn btn-danger btn-sm" onclick="deleteProd(${pid})">🗑 삭제</button>
+      </div>
+      <div class="codes-area">
+        <div class="code-chip" style="background:#EEF4FF;border-color:#4F8EF740;">
+          <span class="code-label" style="color:#4F8EF7;">메인코드</span>
+          <input class="code1" value="${escH(p.code1||'')}" placeholder="메인코드(기본키)" readonly
+            style="cursor:default;color:#4F8EF7;font-weight:700;background:#f0f5ff;"/>
+        </div>
+        ${aliasHtml}
+        <button class="add-code-btn" onclick="addAlias(${pid})">＋ 코드 추가</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function updateBulkBar(){
+  const cnt=selectedProds.size;
+  document.getElementById('bulk-count').textContent=`${cnt}개 선택`;
+  document.getElementById('bulk-del-btn').disabled=cnt===0;
+  const list=getFilteredProds();
+  const chkAll=document.getElementById('chk-all');
+  if(chkAll) chkAll.checked=list.length>0&&list.every(p=>selectedProds.has(p._pid));
+}
+
+function toggleCheck(pid,checked){
+  if(checked) selectedProds.add(pid); else selectedProds.delete(pid);
+  const row=document.getElementById(`prow-${pid}`);
+  if(row) row.classList.toggle('selected',checked);
+  updateBulkBar();
+}
+
+function toggleAllCheck(checked){
+  getFilteredProds().forEach(p=>{
+    if(checked) selectedProds.add(p._pid); else selectedProds.delete(p._pid);
+  });
+  renderProdModal();
+}
+
+function bulkDelete(){
+  const cnt=selectedProds.size;
+  if(!cnt) return;
+  if(!confirm(`선택한 제품 ${cnt}개를 삭제하시겠습니까?`)) return;
+  editProds=editProds.filter(p=>!selectedProds.has(p._pid));
+  selectedProds=new Set();
+  renderProdModal();
+  toast(`🗑 ${cnt}개 삭제됨 (저장 전)`,'warn');
+}
+
+function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+function addAlias(pid){
+  const p=getProd(pid);
+  if(!p) return;
+  if(!p.aliases) p.aliases=[];
+  const nextNum=p.aliases.length+2;
+  const label=`코드${nextNum}`;
+  const ai=p.aliases.length;
+  p.aliases.push({label,code:''});
+  const row=document.getElementById(`prow-${pid}`);
+  if(row){
+    const addBtn=row.querySelector('.add-code-btn');
+    const chip=document.createElement('div');
+    chip.className='code-chip';
+    chip.dataset.ai=ai;
+    chip.innerHTML=`
+      <span class="code-label">${escH(label)}</span>
+      <input value="" placeholder="코드"
+        oninput="getProd(${pid}).aliases[${ai}].code=this.value"/>
+      <span class="chip-del" onclick="removeAlias(${pid},${ai})">✕</span>`;
+    addBtn.parentNode.insertBefore(chip,addBtn);
+    chip.querySelector('input').focus();
+  }
+}
+
+function removeAlias(pid,ai){
+  const p=getProd(pid);
+  if(!p) return;
+  p.aliases.splice(ai,1);
+  p.aliases.forEach((a,i)=>{a.label=`코드${i+2}`;});
+  const row=document.getElementById(`prow-${pid}`);
+  if(row){
+    const aliases=p.aliases||[];
+    const aliasHtml=aliases.map((a,i)=>`
+      <div class="code-chip" data-ai="${i}">
+        <span class="code-label">${escH(a.label)}</span>
+        <input value="${escH(a.code)}" placeholder="없음"
+          oninput="getProd(${pid}).aliases[${i}].code=this.value"/>
+        <span class="chip-del" onclick="removeAlias(${pid},${i})">✕</span>
+      </div>`).join('');
+    row.querySelector('.codes-area').innerHTML=`
+      <div class="code-chip" style="background:#EEF4FF;border-color:#4F8EF740;">
+        <span class="code-label" style="color:#4F8EF7;">메인코드</span>
+        <input class="code1" value="${escH(p.code1||'')}" placeholder="메인코드(기본키)" readonly
+          style="cursor:default;color:#4F8EF7;font-weight:700;background:#f0f5ff;"/>
+      </div>
+      ${aliasHtml}
+      <button class="add-code-btn" onclick="addAlias(${pid})">＋ 코드 추가</button>`;
+  }
+}
+
+function deleteProd(pid){
+  const p=getProd(pid);
+  if(!confirm(`"${p?p.name:'이 제품'}"을 삭제하시겠습니까?`)) return;
+  editProds=editProds.filter(p=>p._pid!==pid);
+  selectedProds.delete(pid);
+  renderProdModal();
+}
+
+function saveProdModal(){
+  const empty=editProds.filter(p=>!String(p.code1||'').trim());
+  if(empty.length){toast(`⚠️ 메인코드가 비어있는 제품 ${empty.length}개가 있습니다`,'warn');return;}
+  S.products=editProds.map(({_pid,...rest})=>rest);
+  const codeMap=buildCodeMap();
+  S.sales=S.sales.map(s=>{
+    const mapped=codeMap.get(s.code)||codeMap.get(s.productName)||s.productName;
+    const prod=S.products.find(p=>p.name===mapped);
+    return {...s,productName:mapped,supplier:prod?prod.supplier:s.supplier};
+  });
+  saveToDB('products',S.products,()=>{
+    saveToDB('sales',S.sales,()=>{showDashboard();render();toast('✅ 제품 저장 완료');});
+  });
+  document.getElementById('prod-modal').classList.remove('show');
+}
+
+// ── 제품 일괄 다운로드 ────────────────────────────────────────
+function downloadProdExcel(){
+  const targets=selectedProds.size>0
+    ? editProds.filter(p=>selectedProds.has(p._pid))
+    : editProds;
+  if(!targets.length){toast('다운로드할 제품이 없습니다','err');return;}
+  const allLabels=[];
+  targets.forEach(p=>(p.aliases||[]).forEach(a=>{
+    if(a.label&&!allLabels.includes(a.label)) allLabels.push(a.label);
+  }));
+  const header=['메인코드','제품명','공급사',...allLabels];
+  const rows=targets.map(p=>{
+    const row=[p.code1||'',p.name||'',p.supplier||''];
+    allLabels.forEach(lbl=>{
+      const found=(p.aliases||[]).find(a=>a.label===lbl);
+      row.push(found?found.code||''  :'');
+    });
+    return row;
+  });
+  const ws=XLSX.utils.aoa_to_sheet([header,...rows]);
+  ws['!cols']=header.map((h,i)=>({wch:i===1?40:i===2?18:20}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'제품목록');
+  const now=new Date();
+  const ts=`${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  XLSX.writeFile(wb,`제품목록_${ts}.xlsx`);
+  toast(`📥 ${targets.length}개 제품 다운로드`);
+}
+
+// ── 제품 일괄 수정 업로드 ─────────────────────────────────────
+function uploadProdExcel(input){
+  const file=input.files[0];
+  if(!file) return;
+  input.value='';
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      if(rows.length<2){toast('데이터가 없습니다','err');return;}
+      const hdr=rows[0].map(h=>String(h||'').trim());
+      const c1Idx=hdr.findIndex(h=>h==='메인코드'||h==='코드1');
+      const nameIdx=hdr.findIndex(h=>h==='제품명');
+      const supplierIdx=hdr.findIndex(h=>h==='공급사');
+      if(c1Idx<0||nameIdx<0){
+        showUploadError(['❌ 헤더에 "메인코드"(또는 "코드1"), "제품명" 컬럼이 필요합니다.']);return;
+      }
+      const aliasLabels=hdr.filter((h,i)=>i!==c1Idx&&i!==nameIdx&&(supplierIdx<0||i!==supplierIdx)&&h);
+      const errors=[];
+      const incomingC1s=[];
+      rows.slice(1).forEach((row,ri)=>{
+        const code1=String(row[c1Idx]||'').trim();
+        if(!code1) return;
+        if(!editProds.find(p=>p.code1===code1)){
+          errors.push(`행 ${ri+2}: 메인코드 "${code1}" 은 등록되지 않은 제품입니다 (메인코드 추가·변경 불가)`);return;
+        }
+        if(incomingC1s.includes(code1)){
+          errors.push(`행 ${ri+2}: 메인코드 "${code1}" 이 파일 내에서 중복됩니다`);
+        } else { incomingC1s.push(code1); }
+      });
+      if(errors.length){showUploadError(errors);return;}
+      let updatedCount=0;
+      rows.slice(1).forEach(row=>{
+        const code1=String(row[c1Idx]||'').trim();
+        if(!code1) return;
+        const prod=editProds.find(p=>p.code1===code1);
+        if(!prod) return;
+        prod.name=String(row[nameIdx]||'').trim()||prod.name;
+        if(supplierIdx>=0) prod.supplier=String(row[supplierIdx]||'').trim();
+        aliasLabels.forEach(lbl=>{
+          const lIdx=hdr.indexOf(lbl);
+          const val=String(row[lIdx]||'').trim();
+          if(!prod.aliases) prod.aliases=[];
+          const ex=prod.aliases.find(a=>a.label===lbl);
+          if(ex){ex.code=val;} else if(val){prod.aliases.push({label:lbl,code:val});}
+        });
+        updatedCount++;
+      });
+      document.getElementById('upload-error-area').innerHTML='';
+      renderProdModal();
+      toast(`✅ ${updatedCount}개 제품 일괄 수정됨 — 💾 저장 버튼을 눌러야 반영됩니다`);
+    }catch(e){showUploadError([`파일 읽기 오류: ${e.message}`]);}
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showUploadError(msgs){
+  document.getElementById('upload-error-area').innerHTML=
+    `<div style="background:#fff5f5;border:1px solid #ffcccc;border-radius:8px;padding:10px 14px;margin-bottom:10px;">
+      <div style="font-size:12px;font-weight:700;color:#cc0000;margin-bottom:6px;">⚠️ 업로드 오류 (${msgs.length}건)</div>
+      ${msgs.slice(0,10).map(m=>`<div style="font-size:11px;color:#c00;margin:2px 0;">• ${escH(m)}</div>`).join('')}
+      ${msgs.length>10?`<div style="font-size:11px;color:#aaa;margin-top:4px;">... 외 ${msgs.length-10}건</div>`:''}
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// ── 판매 편집 모달 ──────────────────────────────────════════
+// ═══════════════════════════════════════════════════════════
+const SF={dateFrom:'',dateTo:'',store:'전체',checked:new Set()};
+
+function openSalesModal(){
+  if(!S.sales.length){toast('판매 데이터가 없습니다','err');return;}
+  editSales=JSON.parse(JSON.stringify(S.sales)).sort((a,b)=>b.date.localeCompare(a.date)||a.store.localeCompare(b.store));
+  editSales.forEach((r,i)=>r._eid=i+1);
+  SF.dateFrom='';SF.dateTo='';SF.store='전체';SF.checked=new Set();
+  const dates=editSales.map(r=>r.date).sort();
+  if(dates.length){
+    document.getElementById('sf-date-from').min=dates[0];
+    document.getElementById('sf-date-from').max=dates[dates.length-1];
+    document.getElementById('sf-date-to').min=dates[0];
+    document.getElementById('sf-date-to').max=dates[dates.length-1];
+  }
+  document.getElementById('sf-date-from').value='';
+  document.getElementById('sf-date-to').value='';
+  sfRenderStoreBtns();
+  renderSalesModal();
+  document.getElementById('sales-modal').classList.add('show');
+}
+
+function sfGetFiltered(){
+  return editSales.filter(r=>
+    (!SF.dateFrom||r.date>=SF.dateFrom)&&
+    (!SF.dateTo||r.date<=SF.dateTo)&&
+    (SF.store==='전체'||r.store===SF.store)
+  );
+}
+
+function sfFilter(){
+  SF.dateFrom=document.getElementById('sf-date-from').value;
+  SF.dateTo=document.getElementById('sf-date-to').value;
+  SF.checked=new Set();
+  renderSalesModal();
+}
+
+function sfClearDate(){
+  SF.dateFrom='';SF.dateTo='';
+  document.getElementById('sf-date-from').value='';
+  document.getElementById('sf-date-to').value='';
+  SF.checked=new Set();
+  renderSalesModal();
+}
+
+function sfSetStore(st){
+  SF.store=st;SF.checked=new Set();
+  sfRenderStoreBtns();
+  renderSalesModal();
+}
+
+function sfRenderStoreBtns(){
+  const stores=['전체',...[...new Set(editSales.map(r=>r.store))].filter(Boolean).sort()];
+  document.getElementById('sf-store-btns').innerHTML=stores.map((st,si)=>{
+    const color=si===0?'#999':PAL[si%PAL.length];
+    const on=SF.store===st;
+    return `<button class="sf-store-btn${on?' on':''}"
+      style="color:${on?'#fff':color};border-color:${on?color:'#e0e3ef'};background:${on?color:'transparent'};"
+      onclick="sfSetStore('${st}')">${st}</button>`;
+  }).join('');
+}
+
+function sfToggleAll(checked){
+  const visible=sfGetFiltered();
+  if(checked) visible.forEach(r=>SF.checked.add(r._eid));
+  else SF.checked=new Set();
+  renderSalesModal();
+}
+
+function sfToggleRow(eid,checked){
+  if(checked) SF.checked.add(eid); else SF.checked.delete(eid);
+  sfUpdateBulkBar();
+  const tr=document.querySelector(`tr[data-eid="${eid}"]`);
+  if(tr) tr.classList.toggle('sf-checked',checked);
+}
+
+function sfUpdateBulkBar(){
+  const cnt=SF.checked.size;
+  document.getElementById('sf-sel-count').textContent=`${cnt}개 선택`;
+  document.getElementById('sf-bulk-del').disabled=cnt===0;
+  const visible=sfGetFiltered();
+  const chkAll=document.getElementById('sf-chk-all');
+  if(chkAll) chkAll.checked=visible.length>0&&visible.every(r=>SF.checked.has(r._eid));
+}
+
+function sfBulkDelete(){
+  const cnt=SF.checked.size;
+  if(!cnt) return;
+  if(!confirm(`선택한 ${cnt}행을 삭제하시겠습니까?`)) return;
+  editSales=editSales.filter(r=>!SF.checked.has(r._eid));
+  SF.checked=new Set();
+  renderSalesModal();
+  toast(`🗑 ${cnt}행 삭제됨 (저장 전)`,'warn');
+}
+
+function renderSalesModal(){
+  const hasFilter=SF.dateFrom||SF.dateTo||SF.store!=='전체';
+  if(!hasFilter){
+    document.getElementById('sales-count').textContent=`전체 ${editSales.length}행`;
+    document.getElementById('sf-result-count').textContent='';
+    sfUpdateBulkBar();
+    document.getElementById('sales-modal-body').innerHTML=`
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:#aaa;">
+        <div style="font-size:36px;">🔍</div>
+        <div style="font-size:14px;font-weight:600;color:#555;">날짜 또는 거래처를 먼저 선택해주세요</div>
+        <div style="font-size:12px;color:#aaa;text-align:center;line-height:1.8;">
+          전체 데이터가 <b style="color:#4F8EF7;">${editSales.length.toLocaleString()}행</b>으로 많아<br>
+          필터를 걸어야 빠르게 불러올 수 있어요
+        </div>
+      </div>`;
+    return;
+  }
+  const visible=sfGetFiltered();
+  document.getElementById('sales-count').textContent=`전체 ${editSales.length}행`;
+  const prodNames=new Set(S.products.map(p=>p.name));
+  const unmatchedCnt=visible.filter(r=>r.productName&&!prodNames.has(r.productName)).length;
+  document.getElementById('sf-result-count').textContent=
+    `표시 ${visible.length}행`+(unmatchedCnt?` · ⚠️ 미매칭 ${unmatchedCnt}행`:'');
+  sfUpdateBulkBar();
+  if(!visible.length){
+    document.getElementById('sales-modal-body').innerHTML=`<div class="no-data" style="padding:40px 0;">조건에 맞는 데이터가 없습니다</div>`;
+    return;
+  }
+  const prodOpts=S.products.map(p=>`<option value="${escH(p.name)}">${escH(p.name)}</option>`).join('');
+  document.getElementById('sales-modal-body').innerHTML=`
+    <table class="sales-edit-table">
+      <thead><tr>
+        <th style="width:32px;"><input type="checkbox" id="tbl-chk-all" style="width:14px;height:14px;accent-color:#4F8EF7;"
+          onchange="sfToggleAll(this.checked)" ${visible.length>0&&visible.every(r=>SF.checked.has(r._eid))?'checked':''}/></th>
+        <th>날짜</th><th>거래처</th><th>제품명</th>
+        <th style="text-align:right;">수량</th>
+        <th style="text-align:right;">공급가액</th>
+        <th style="text-align:right;">합계</th>
+        <th style="width:40px;"></th>
+      </tr></thead>
+      <tbody>${visible.map(r=>{
+        const unmatched=r.productName&&!prodNames.has(r.productName);
+        const checked=SF.checked.has(r._eid);
+        return `<tr data-eid="${r._eid}" class="${checked?'sf-checked':''} ${unmatched?'sf-unmatched':''}">
+          <td><input type="checkbox" style="width:14px;height:14px;accent-color:#4F8EF7;" ${checked?'checked':''}
+            onchange="sfToggleRow(${r._eid},this.checked)"/></td>
+          <td style="font-size:11px;color:#888;">${r.date||''}</td>
+          <td style="font-size:11px;">${escH(r.store||'')}</td>
+          <td>${unmatched
+            ?`<select style="font-size:11px;border:1px solid #F7545433;border-radius:5px;color:#e03030;padding:2px 4px;background:#fff8f8;"
+                onchange="sfRemapProduct(${r._eid},this.value)">
+                <option value="${escH(r.productName)}">${escH(r.productName)} ⚠️</option>
+                ${prodOpts}
+              </select>`
+            :`<span style="font-size:11px;">${escH(r.productName||'')}</span>`}
+          </td>
+          <td style="text-align:right;font-size:11px;">${r.qty||0}</td>
+          <td style="text-align:right;font-size:11px;color:#e07820;">${r.supply?fmt(r.supply):'0'}</td>
+          <td style="text-align:right;font-size:11px;color:#2eaa60;">${r.total?fmt(r.total):'0'}</td>
+          <td><button onclick="sfDeleteRow(${r._eid})" style="border:none;background:none;color:#ccc;cursor:pointer;font-size:14px;">🗑</button></td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
+function sfRemapProduct(eid,newName){
+  const r=editSales.find(r=>r._eid===eid);
+  if(!r) return;
+  r.productName=newName;
+  const prod=S.products.find(p=>p.name===newName);
+  if(prod) r.supplier=prod.supplier;
+  renderSalesModal();
+}
+
+function sfDeleteRow(eid){
+  editSales=editSales.filter(r=>r._eid!==eid);
+  SF.checked.delete(eid);
+  renderSalesModal();
+}
+
+function saveSalesModal(){
+  S.sales=editSales.map(({_eid,...rest})=>rest);
+  saveToDB('sales',S.sales,()=>{render();toast('✅ 판매 데이터 저장 완료');});
+  document.getElementById('sales-modal').classList.remove('show');
+}
+
+['prod-modal','sales-modal'].forEach(id=>{
+  document.getElementById(id).addEventListener('click',function(e){if(e.target===this)this.classList.remove('show');});
+});
+
 // ── 이벤트 ───────────────────────────────────────────────────
 function clearDates(){
   S.dateFrom='';S.dateTo='';
