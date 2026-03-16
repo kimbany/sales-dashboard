@@ -1552,11 +1552,17 @@ function renderStoreCards(){
   const totalQty=allData.reduce((a,b)=>a+b.qty,0);
   const totalRev=allData.reduce((a,b)=>a+b.total,0);
 
+  // 거래처 매출 기준 내림차순 정렬
+  const sortedStores=stores.map(st=>({
+    st,
+    rev:S.sales.filter(r=>r.store===st&&r.date>=baseFrom&&r.date<=baseTo).reduce((a,b)=>a+b.total,0)
+  })).sort((a,b)=>b.rev-a.rev).map(x=>x.st);
+
   // 그래프용: 기준 기간 내 날짜들 최근 10일
   const baseDates=[...new Set(allData.map(r=>r.date))].sort().slice(-10);
   const recent=baseDates.length>=2 ? baseDates : [...new Set(S.sales.map(r=>r.date))].sort().slice(-10);
 
-  el.innerHTML=stores.map((st,si)=>{
+  el.innerHTML=sortedStores.map((st,si)=>{
     const color=PAL[(si+1)%PAL.length];
     const stData=S.sales.filter(r=>r.store===st&&r.date>=baseFrom&&r.date<=baseTo);
     const tQty=stData.reduce((a,b)=>a+b.qty,0);
